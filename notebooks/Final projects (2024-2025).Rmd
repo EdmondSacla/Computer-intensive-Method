@@ -1,0 +1,1137 @@
+---
+title: "Computer Intensive Methods: Final projects (2024/2025)"
+output: html_document
+date: "2025-01-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library("DAAG")
+library("robust")
+```
+
+# Introduction
+
+## The projects
+
+The final project in the course consists of 3 mini projects. In each project you are asked to conduct an analysis of one or more dataset(s). In some cases, to access the data, you need to install R packages. The datasets are a part of these packages. You can get more information about the data using a link provided at a description of the data.
+
+## Complete case analysis
+
+For all projects, **only observations without missing values (complete case analysis) should be included in the analysis**. Use the R function na.omit(data) to exclude all observations with missing values.
+
+## General information
+
+1.  The projects should be done in groups of 3-4 students.
+2.  For each project, write a short report of maximum 12 pages with your solution for the questions.
+3.  Formulate clearly the hypotheses that you wish to test and/or the statistic(s) of interest.
+4.  Whenever relevant, formulate clearly the statistical model(s) that you use.
+5.  Present clearly the bootstrap algorithm(s) (or the re sampling algorithm(s)) that you use. In case that there is more then one re sampling method in a question, formulate all re sampling algorithms that you use.
+6.  Do not include R code in the report but prepare a separate appendix in which R code is listed to all questions.
+7.  For each question, discuss and interpret the results
+
+## What do you need to submit as a solution?
+
+1.  You need to submit answers to the questions. In your report focus on the questions and give clear answers. Do not describe the data structure in your answer.
+2.  Answers without a clear explanation about the results will not receive points. For example, if the question is: “Use parametric bootstrap to calculate a 95% for the mean” and you answer will be: “the C.I is (10.55-10.79)” you will not receive points.
+
+## When do you need to submit the solution?
+
+-   Submission date: 24th January 2025
+-   Time: 17:00
+
+## How to submit the solution?
+
+The solutions should be sent by email (one email per group) to [ziv.shkedy\@uhasselt.be](mailto:ziv.shkedy@uhasselt.be). An information email will be sent in early January 2025.
+
+## Oral exam: an open book exam
+
+1.  The oral exam will be an individual oral exam of (approx.) 20-30 minutes per students. The questions in the exam will be related to your homeworks and selected topics from the course.
+2.  The individual oral exam will take place in January 2025. More information about the exam and the time schedule for the exam will be sent by email in a later stage.
+3.  The oral exam is an open book exam, you can use any material that you find useful to solve the questions (this include course slides, online books, websites, etc).
+4.  You are NOT allowed to discuss the exam and projects with students from other groups. Do not share your code with students from other groups and do not share your solutions with students from other groups.
+5.  Bring your solutions to the projects with you to the exam.
+
+# Project 1
+
+In this project, in all questions, we focused on the nassCDS data which is a US data from police-reported car crashes (1997-2002) in which there is a harmful event (people or property). Data are restricted to front-seat occupants, include only a subset of the variables recorded. More information about the dataset can be found using the following link: https://www.rdocumentation.org/packages/DAAG/versions/1.22/topics/nassCDS. The data is a part of the DAAG R package. To get an access to the data you first need to install the package. The list of variables names is shown below.
+
+```{r}
+data(nassCDS)
+nassCDS <- na.omit(nassCDS)
+names(nassCDS)
+```
+
+```{r}
+dim(nassCDS)
+```
+
+## Part 1
+
+Let $Y_i$ be an indicator variable which takes the value of 1 if an occupant died in an accident (the variable *dead*) and zero otherwise and $X_i$ be the age of occupant in years (the variable *ageOFocc*). We consider the following GLM:
+
+$g(P(Y_i = 1)) = \beta_0 + \beta_1 X_i$
+
+### Question 1.1
+
+Estimate the model using a classical GLM approach
+
+```{r}
+glm.daag <- glm(dead ~ ageOFocc, data = nassCDS, family = "binomial")
+summary(glm.daag)
+```
+
+### Question 1.2
+
+Let $X_{50}$ be the age of occupant for which the probability to die is 0.5, i.e., $P(Y_i = 1) = 0.5$. Estimate $X_{50}$. Use non parametric bootstrap to estimate the distribution of $X_{50}$ and to construct a 95% C.I. for the $X_{50}$
+
+```{r}
+beta_0 <- coef(glm.daag)[1]
+beta_1 <- coef(glm.daag)[2]
+mel50 <- -beta_0 / beta_1
+
+sprintf("Median effective level: %.0f", mel50)
+
+```
+
+```{r, cache=TRUE}
+N <- 1000L
+t.boot <- coef.boot <- matrix(nrow = N, ncol = 2)
+size <- nrow(nassCDS)
+for (i in seq_len(N)) {
+  idx <- sample(size, replace = TRUE)
+  model <- glm(dead ~ ageOFocc, data = nassCDS[idx, ], family = binomial(link = "logit"))
+  coef.boot[i, ] <- coef(model)
+  t.boot[i, ] <- summary(model)$coefficients[, 3]
+}
+
+mel.boot <- -coef.boot[, 1] / coef.boot[, 2]
+sprintf("Bootstrap median effective level: %.0f", mean(mel.boot))
+```
+
+```{r}
+hist(mel.boot, probability = TRUE, nclass = 100)
+ci <- quantile(mel.boot, probs = c(0.025, 0.975))
+abline(v = ci, col = "blue")
+```
+
+### Question 1.3
+
+For the model formulated above, estimate the OR (for a unit increased in age). Use non parametric bootstrap to construct a 95% C.I. for the OR (for a unit increased in age) using the percentile and bootstrap *t* interval methods, which one do you prefer for the parameter OR ?
+
+```{r}
+beta_1 <- coef(glm.daag)[2]
+exp(beta_1)
+```
+
+```{r}
+quantile(exp(coef.boot[,2]), probs = c(0.025, 0.975))
+
+up <- quantile(t.boot[, 2], probs = 0.975)
+lo <- quantile(t.boot[, 2], probs = 0.025)
+t.hat <- summary(glm.daag)$coefficients[2,1]
+se.t.hat <- summary(glm.daag)$coefficients[2,2]
+exp(c(t.hat + se.t.hat * lo, t.hat + se.t.hat*up))
+```
+
+### Question 1.4
+
+We focus on the odds ratio (OR) for a unit increased in age. Use parametric bootstrap to test the null hypothesis $H_0: OR = 1$.
+
+```{r}
+fit.daag0 <- glm(dead ~ 1, data = nassCDS, family = binomial(link = "logit"))
+summary(fit.daag0)
+```
+
+```{r}
+inv.logit <- function(x) {
+  exp(x) / (1 + exp(x))
+}
+prob <- inv.logit(-3.05484)
+prob
+```
+
+```{r, cache=TRUE}
+attach(nassCDS)
+
+N <- 1000L
+t.boot <- coef.boot <- matrix(nrow = N, ncol = 2)
+size <- nrow(nassCDS)
+for (i in seq_len(N)) {
+  dead.boot <- rbinom(size, 1, prob)
+  model <- glm(dead.boot ~ ageOFocc, family = binomial(link = "logit"))
+  coef.boot[i, ] <- coef(model)
+  t.boot[i, ] <- summary(model)$coefficients[, 3]
+}
+```
+
+```{r}
+hist(coef.boot[, 2], nclass = 50, xlim = c(-0.03, 0.03))
+abline(v = beta_1, col = "red")
+```
+
+### Question 1.5
+
+Let $\pi_{33}$ be the probability of death for an occupant at age 33. Use parametric bootstrap to calculate the standard error for $\pi_{33}$ and construct a 90% C.I. for $\pi_{33}$.
+
+```{r, cache=TRUE}
+attach(nassCDS)
+size <- nrow(nassCDS)
+N <- 1000L
+newdata <- data.frame(ageOFocc = 33.0)
+pi33.boot <- numeric(N)
+for (i in seq_len(N)) {
+  dead.boot <- rbinom(size, 1, predict(glm.daag, type = "response"))
+  model <- glm(dead.boot ~ ageOFocc, family = binomial(link = "logit"))
+  summary(model)
+  pi33.boot[i] <- predict(model, newdata = newdata, type = "response")
+}
+
+mean(pi33.boot)
+var(pi33.boot)
+quantile(pi33.boot,probs=c(0.05,0.950))
+
+```
+
+```{r}
+hist(pi33.boot,nclass=50)
+abline(v = quantile(pi33.boot,probs=c(0.05,0.950)), col = "blue")
+```
+
+## Part 2
+
+In this question we fit a robust GLM for the model specified in Q1. Use the R package *glmRob* to fit the model.
+
+### Question 2.1
+
+Estimate the model using the R package glmRob.
+
+```{r}
+glm.rob.daag <- glmRob(dead ~ ageOFocc, data = nassCDS, family = "binomial")
+summary(glm.rob.daag)
+```
+
+### Question 2.2
+
+Use non parametric bootstrap to estimate the SE for the intercept and slope.
+
+```{r, cache=TRUE}
+N <- 1000L
+rob.coef.boot <- matrix(nrow = N, ncol = 2)
+size <- nrow(nassCDS)
+for (i in seq_len(N)) {
+  idx <- sample(size, replace = TRUE)
+  model <- glmRob(dead ~ ageOFocc, data = nassCDS[idx,], family = "binomial")
+  rob.coef.boot[i, ] <- coef(model)
+}
+```
+
+
+```{r}
+par(mfrow=c(1,2))
+hist(rob.coef.boot[,1],main="alpha",nclass=25)
+abline(v = quantile(rob.coef.boot[,1], probs = c(0.025, 0.975)), col = "blue")
+
+hist(rob.coef.boot[,2],main="beta",nclass=25)
+abline(v = quantile(rob.coef.boot[,2], probs = c(0.025, 0.975)), col = "blue")
+```
+
+### Question 2.3
+
+Use the jackknife and the bootstrap procedures to estimate the bias and MSE for the intercept and slope estimated by: (1) the GLM model in Q2.1 and (2) the robust GLM model estimated in Q2.2. Which method you prefer to use for the estimation of the intercept and slope?
+
+TODO
+
+## Part 3
+
+In this question we focus of the following 2 × 2 table (for the complete case analysis) for the variables airbag and dead
+
+```
+##
+## alive dead
+## none 11058 669
+## airbag 13825 511
+```
+
+### Question 3.1
+
+Define the observation unit ($X_i$, $Y_i$) for the question
+
+```{r}
+bag.dead <- matrix(c(11058, 13825, 669, 511), nrow = 2, 
+                dimnames = list(c("none", "airbag"), c("alive", "dead")))
+
+addmargins(bag.dead)
+```
+### Question 3.2
+
+Calculate the odds ratio for usage of airbag and the accident outcome (dead/alive) and construct 95% confidence interval. You can use the R function oddsratio. What is your conclusions ? Do you think that airbags in the car influence the accident outcome ?
+
+```{r}
+epitools::oddsratio(bag.dead)
+```
+TODO: interpretation
+
+### Question 3.3
+
+Use parametric bootstrap to construct a construct a 95% confidence interval for the OR.
+
+```{r, cache=TRUE}
+B <- 100L
+n.nobag <- 669 + 11058
+n.airbag <- 511 + 13825
+p.nobag <- 669 / n.nobag
+p.airbag <- 511 / n.airbag
+ors.b <- numeric(B)
+for (i in seq_len(B)) {
+  s1 <- sum(rbinom(n.nobag, 1, p.nobag))
+  s2 <- sum(rbinom(n.airbag, 1, p.airbag))
+  ors.b[i] <- epitools::oddsratio(c(n.nobag - s1, s1, n.airbag - s2, s2))$measure[2,1]
+}
+
+mean(ors.b)
+quantile(ors.b, probs = c(0.025, 0.975))
+```
+
+```{r}
+hist(ors.b, nclass = 50)
+abline(v = quantile(ors.b, probs = c(0.025, 0.975)), col = "red")
+```
+
+### Question 3.4
+
+Use permutations test to test the hypothesis that airbags in the car DO NOT influence the accident outcome using a chi-square test for a 2 × 2 table. Compare the distribution of the chi-square test statistic in this question to the theoretical distribution of the test statistic.
+
+```{r}
+chisq.test(bag.dead, correct = FALSE)
+```
+
+```{r, cache=TRUE}
+B <- 1000L
+n.nobag <- 669 + 11058
+n.airbag <- 511 + 13825
+p.pooled <- (669 + 511) / (n.nobag + n.airbag)
+chisq.b <- numeric(B)
+for (i in seq_len(B)) {
+  s1 <- sum(rbinom(n.nobag, 1, p.pooled))
+  s2 <- sum(rbinom(n.airbag, 1, p.pooled))
+  tbl.b <- matrix(c(n.nobag - s1, s1, n.airbag - s2, s2), byrow = TRUE, nrow = 2)
+  chisq.b[i] <- chisq.test(tbl.b)$statistic
+}
+
+```
+
+```{r}
+hist(chisq.b, breaks = 100, probability = TRUE)
+# abline(v = 68.362, col = "red")
+curve(dchisq(x, df = 1), col = "red", lwd = 2, add = TRUE)
+```
+
+## Part 4
+
+If this question we focus on the variables dead (the outcome of the accident) and the gender (the variable sex).
+
+### Question 4.1
+
+Estimate the proportion of male (𝜋𝑀) and female (𝜋𝐹) that died in the accidents.
+
+```{r}
+sex.died <- with(nassCDS, table(sex, dead))
+n.total <- sum(sex.died)
+n.male <- 716 + 13253
+n.female <- 464 + 11784
+p.male <- 716 / n.male
+p.female <- 464 / n.female
+addmargins(sex.died)
+```
+
+### Question 4.2
+
+Test the hypothesis that the proportion of male and female that died in an accident are equal using a classical two-samples test (use a two sided test).
+
+```{r}
+prop.test(sex.died, correct = FALSE)
+```
+
+### Question 4.3
+
+Use parametric bootstrap to test the hypothesis that the proportion of male and female that died in an accidents are equal against a two sided alternative.
+
+```{r}
+p.pooled <- (464 + 716) / n.total
+
+B <- 1000L
+z.b <- diff.b <- numeric(B)
+for (i in 1:B) {
+  s1 <- sum(rbinom(n.female, 1, p.pooled))
+  p.female.b <- s1 / n.female
+  
+  s2 <- sum(rbinom(n.male, 1, p.pooled))
+  p.male.b <- s2 / n.male
+  
+  p.total.b <- (s1 + s2) / (n.male + n.female)
+  
+  diff.b[i] <- p.male.b - p.female.b
+  
+  z.b[i] <- (p.male.b - p.female.b) / sqrt(p.total.b * (1 - p.total.b) * (1/n.female + 1/n.male))
+}
+```
+
+```{r}
+hist(z.b, nclass=50, probability=TRUE)
+```
+### Question 4.4
+
+Use non-parametric bootstrap construct a 95% confident interval for 𝜋𝑀 − 𝜋𝐹
+
+```{r}
+B <- 1000L
+size <- nrow(nassCDS)
+diff.b <- numeric(B)
+for (i in 1:B) {
+  idx.b <- sample(size, replace = TRUE)
+  summary.b <- with(nassCDS[idx.b, ], table(dead, sex))
+  diff.b[i] <- diff(summary.b[1,] / colSums(summary.b))
+}
+
+mean(diff.b)
+quantile(diff.b, probs = c(0.025, 0.975))
+```
+
+```{r}
+hist(diff.b, nclass = 50)
+abline(v = quantile(diff.b, probs = c(0.025, 0.975)), col = "red", lty = "dashed")
+```
+
+# Project 2
+
+In this question we use the horseshoe crab dataset. The data is available in R (crabs) as a part of the R package glm2. To get the data, install the package glm2 and use the code below to access the data.
+
+```{r}
+library(glm2)
+data(crabs)
+names(crabs)
+```
+
+```{r}
+plot(crabs$Width, crabs$Satellites)
+```
+
+The dataset contains information about of 173 female horseshoe crab. You can find more details about this dataset in the book of Alen Agresti (An Introduction to Categorical Data Analysis, Section 3.3.2). The first 6 lines are given below.
+
+```{r}
+head(crabs)
+```
+
+Each female horseshoe crab in the study had a male crab attached to her nest. The study investigated factors that affect whether the female crab had any other males, **called satellites**, residing nearby her. The response outcome for each female crab is her number of satellites (*Satellites*). In this question, possible explanatory variables are the female crab’s shell width (*Width*), which is a summary of her size and a binary factor indicating whether the female has good spine condition (yes or no, in R: *GoodSpine*)
+
+## Part 1
+
+### Question 1.1
+
+Let $Y_i$ be the number of satellites,we assume that $Y_i ~ Poisson(\mu_i)$ where $\mu_i$ denotes the expected number of satellites for the i-th female crab. We consider the following linear predictor:
+
+$$
+g(\mu_i) =  \beta_0 + \beta_1 * Width_i + \beta_2 * GoodSpine_i.
+$$
+
+Here, $g()$ is the link function. Formulate an appropriate model for the number satellites. Fit the model and use the likelihood ratio test in order to test the null hypothesis $H_0: \beta_2 = 0$ against a two sided alternative.
+
+```{r}
+crabs_glm_v1 <- glm(Satellites ~ Width,             data = crabs, family = "poisson")
+crabs_glm_v2 <- glm(Satellites ~ Width + GoodSpine, data = crabs, family = "poisson")
+
+teststat <- as.numeric(-2 * (logLik(crabs_glm_v1) - logLik(crabs_glm_v2)))
+pchisq(teststat, df = 1, lower.tail = FALSE)
+
+```
+### Question 1.2
+
+Use parametric and non parametric bootstrap to test the null hypothesis in Q1.1. Compare the distribution of the likelihood ratio statistic obtained for the two bootstrap procedures to the theoretical distribution of the likelihood ratio test, what is you conclusion ?
+
+```{r}
+# non-parametric bootstrap
+B <- 1000L
+size <- nrow(crabs)
+lr.nb <- numeric(B)
+for (i in 1:B) {
+  idx.b <- sample(size, replace = TRUE)
+  crabs.b <- crabs[idx.b, ]
+  m1 <- glm(Satellites ~ Width,             data = crabs.b, family = "poisson")
+  m2 <- glm(Satellites ~ Width + GoodSpine, data = crabs.b, family = "poisson")
+  lr.nb[i] <- as.numeric(-2 * (logLik(m1) - logLik(m2)))
+}
+
+mean(lr.nb)
+(1 + sum(lr.nb > teststat))/(1 + B) #  p-value
+```
+
+```{r}
+# parametric
+attach(crabs)
+lambdas <- predict(crabs_glm_v1, type = "response")
+B <- 1000L
+size <- nrow(crabs)
+lr.pb <- numeric(B)
+for (i in 1:B) {
+  satellites.b <- rpois(size, lambdas)
+  m1 <- glm(satellites.b ~ Width, family = "poisson")
+  m2 <- glm(satellites.b ~ Width + GoodSpine, family = "poisson")
+  lr.pb[i] <- as.numeric(-2 * (logLik(m1) - logLik(m2)))
+}
+
+mean(lr.pb)
+(1 + sum(lr.pb > teststat))/(1 + B) #  p-value
+```
+
+```{r}
+par(mfrow = c(1, 2))
+hist(lr.pb, main = "Parametric")
+hist(lr.nb, main = "Non-parametric")
+```
+
+### Question 1.3
+
+Use permutations test to test the null hypothesis formulated in Q1.1
+
+```{r}
+attach(crabs)
+B <- 1000L
+size <- nrow(crabs)
+lr.perm <- numeric(B)
+for (i in 1:B) {
+  satellites.b <- sample(Satellites, replace = FALSE)
+  m1 <- glm(satellites.b ~ Width, family = "poisson")
+  m2 <- glm(satellites.b ~ Width + GoodSpine, family = "poisson")
+  lr.perm[i] <- as.numeric(-2 * (logLik(m1) - logLik(m2)))
+}
+
+mean(lr.perm)
+(1 + sum(lr.perm > teststat))/(1 + B) # p-value
+```
+
+## Part 2
+
+The data we use for this question is the sleep data. The study was conducted to show the effect of two soporific drugs (increase in hours of sleep compared to control) on 10 patients. The  variable extra is the response variable , represents the increase in hours of sleep due to the treatment, and the variable group is the grouping factor. The data is given below.
+
+```{r}
+extra<-c(0.7,-1.6,-0.2,-1.2,-0.1,3.4,3.7,0.8,0.0,2.0,
+1.9,0.8,1.1,0.1,-0.1,4.4,5.5,1.6,4.6,4.3)
+group<-c(rep(1,10),rep(2,10))
+ID<-c(1:20)
+(sleep <- data.frame(extra,group,ID))
+```
+
+let $\mu_1$ and $\mu_2$ be the means of the first and the second treatment group, respectively. We wish to test the null hypothesis
+
+$$
+H_0:\mu_1 = \mu_2,
+$$
+
+against a two sided alternative.
+
+### Question 2.1
+
+Use the classical two-samples t-test for _two independent samples_.
+
+```{r}
+t.test(extra ~ group, data = sleep, alternative = "two.sided")
+```
+
+### Question 2.2
+
+```{r}
+t.obs <- -1.9278
+B <- 1000L
+t.boot <- numeric(B)
+for (i in 1:B) {
+  extra.b <- sample(sleep$extra, replace = T)
+  t.boot[i] <- t.test(extra.b ~ group)$statistic
+}
+
+(1 + sum(abs(t.boot) > abs(t.obs)))/(1 + B)
+hist(t.boot, nclass = 50)
+abline(v = t.obs, col = "red")
+```
+
+### Question 2.3
+
+```{r}
+mad <- function(x) {
+  sum(abs(x - median(x)))
+}
+
+tm <- function(x, y) {
+  x.median <- median(x)
+  y.median <- median(y)
+  return ( (x.median - y.median) / (mad(x) + mad(y)) )
+}
+
+(tm.obs <- tm(extra[group == 1], extra[group == 2]))
+
+```
+
+```{r}
+x <- extra[group == 1]
+y <- extra[group == 2]
+x.n <- length(x)
+y.n <- length(y)
+x.m <- mean(x)
+y.m <- mean(y)
+x.sd <- sd(x)
+y.sd <- sd(y)
+
+B <- 10000L
+tm.boot <- numeric(B)
+for (i in 1:B) {
+  x.b <- rnorm(x.n, x.m, x.sd)
+  y.b <- rnorm(y.n, y.m, y.sd)
+  tm.boot[i] <- tm(x.b, y.b)
+}
+```
+
+```{r}
+hist(tm.boot, nclass = 50)
+abline(v = tm.obs, col = "red")
+```
+
+### Question 2.4
+
+Compare the distribution of the test statistics in Q2.2 and Q2.3
+
+```{r}
+par(mfrow = c(1,2))
+hist(t.boot, nclass = 50, main = "Based on t-test statistic")
+hist(tm.boot, nclass = 50, main = "Based on robust t-test statistic")
+```
+
+## Part 3 
+
+We consider the following dataset with three variables and 10 observations.
+
+```{r}
+ID<-c(1:10)
+x1<-c(0.8,-1.23,1.25,-0.28,-0.03,0.61,1.43,-0.54,-0.35,-1.60)
+x2<-c(0.64,-1.69,1.47,-0.14,-0.18,0.43,1.61,-0.31,-0.38,-1.82)
+data.frame(ID,x1,x2)
+```
+
+Note that there two observations per subject: ($X_{1i}$, $X_{2i}$) which represent a measurement of the same variable before and after a treatment. The statistic of primary interest in this question is the ratio between the means, that is
+
+$$
+\hat{\theta} = \frac{\overline{X}_1}{\overline{X}_2}
+$$
+
+### Question 3.1
+
+Estimate the ratio statistic.
+
+```{r}
+(theta.obs <- mean(x1) / mean(x2))
+```
+
+### Question 3.2
+
+Estimate the standard error of the ratio using non parametric bootstrap and Jackknife. For the bootstrap procedure use: B=10,20,50,100,250,500,1000,2500,5000,7500,10000. Which value of B you
+recommend to use?
+
+```{r}
+# Jackknife
+n <- length(ID)
+theta.jk <- numeric(n)
+for (i in 1:n) {
+  x1.jk <- x1[-i]
+  x2.jk <- x2[-i]
+  theta.jk[i] <- mean(x1.jk) / mean(x2.jk)
+}
+```
+
+
+```{r}
+mean(theta.jk)
+(n - 1) / n * sum(theta.jk - mean(theta.jk))^2
+```
+
+
+```{r}
+# non-parametric bootstrap
+Bs <- c(10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 7500, 10000)
+n <- length(ID)
+theta.bs <- vector(mode = "list", length = length(Bs))
+names(theta.bs) <- paste0("B=", Bs)
+for (i in seq_along(Bs)) {
+  B <- Bs[i]
+  theta.b <- numeric(B)
+  for (j in 1:B) {
+    index.b <- sample(n, replace = TRUE)
+    theta.b[j] <- mean(x1[index.b]) / mean(x2[index.b])
+  }
+  theta.bs[[i]] <- theta.b
+}
+```
+
+```{r}
+sapply(theta.bs, var)
+```
+
+### Question 3.3
+
+Construct a 95% bootstrap confidence interval for the ratio
+
+```{r}
+quantile(theta.bs[[1]], probs = c(0.025, 0.975))
+```
+
+### Question 3.4
+
+Use a bootstrap procedure to test the hull hypothesis $H_0: \theta = 1$ against a one sided alternative. **Do not** use a two-samples paired t-test for the mean difference to test the null hypothesis
+
+```{r}
+x1.mean <- mean(x1)
+x2.mean <- mean(x2)
+x1.centered <- scale(x1, scale = FALSE) + (x1.mean + x2.mean) / 2
+x2.centered <- scale(x2, scale = FALSE) + (x1.mean + x2.mean) / 2
+
+B <- 1000L
+thetaH0.b <- numeric(B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  thetaH0.b[i] <- mean(x1.centered[index.b]) / mean(x2.centered[index.b])
+}
+
+mean(thetaH0.b)
+(1 + sum(thetaH0.b < theta.obs)) / (1 + B)
+
+```
+
+```{r}
+hist(thetaH0.b, nclass = 50)
+abline(v = theta.obs, col = "red")
+```
+
+## Part 4
+
+Consider the data in Q3, let Let $\mu_1$ and $\mu_2$ the mean of the subjects’ first and the second measurements, respectively. Let the mean deference $\mu_d = \mu_1 - \mu_2 = E(X_{1i}) − (X_{2i})$.
+
+### Question 4.1
+
+Construct a 95% C.I for $\mu_d$ using the classical method.
+
+```{r}
+n <- length(ID)
+mu_d <- mean(x1) - mean(x2)
+se_d <- sqrt(var(x1) / n + var(x2) / n)
+t_critical <- qt(0.975, df = 2 * n - 2)
+c(mu_d - se_d * t_critical, mu_d + se_d * t_critical)
+```
+
+```{r}
+t.test(x1, x2)
+```
+
+### Question 4.2
+
+Use non parametric bootstrap to construct a 95% C.I for $\mu_d$. Use the percentile, bootstrap t and BCa methods to construct the C.I.
+
+```{r}
+B <- 1000L
+n <- length(ID)
+mu.b <- t.b <- numeric(B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  x1.b <- x1[index.b]
+  x2.b <- x2[index.b]
+  mu.b[i] <- mean(x1.b) - mean(x2.b)
+  t.b[i] <- mu.b[i] / sqrt(var(x1.b) / n + var(x2.b) / n)
+}
+```
+
+```{r}
+# TODO: t-intervals, BCa
+quantile(mu.b, probs = c(0.025, 0.975)) #  percentile
+```
+
+### Question 4.3
+
+Test the hypothesis $H_0: \mu_d = 0$ using a non parametric bootstrap procedure.
+
+```{r}
+z <- c(x1, x2)
+m <- length(x1)
+n <- length(x2)
+mn <- m + n
+B <- 1000L
+t.boot <- numeric(B)
+for (i in 1:B) {
+  z.b <- sample(z, mn, replace = TRUE)
+  x1.b <- z.b[1:n]
+  x2.b <- z.b[(n+1):mn]
+  t.boot[i] <- mean(x1.b) - mean(x2.b)
+}
+```
+
+```{r}
+hist(t.boot, nclass=50, probability=T)
+```
+
+
+# Project 3
+
+## Part 1
+
+The data we use in this question is the Chicks dataset. The data contains information over an experiment was conducted to measure and compare the effectiveness of various feed supplements on the growth rate of chickens. use the following code to access the data:
+
+```{r}
+head(chickwts)
+```
+
+The question of primary interest is if there is a difference between the chicks weights across the diet groups. Let $Y_{ij}$ be the weight of a chick $i$ in diet group $j$.
+
+### Question 1.1
+
+Formulate a one-way ANOVA model for the problem, formulate the null hypothesis and the alternative. Test the null hypothesis using the classical F test. Formulate the test statistic and test the null hypothesis using significance level of 5%
+
+```{r}
+chickwts.lm <- lm(weight ~ feed, data = chickwts)
+anova(chickwts.aov)
+```
+
+### Question 1.2
+
+Use semi-parametric bootstrap in order to test the null hypothesis of no diet effect.
+
+```{r}
+chickwts.lmh0 <- lm(weight ~ 1, data = chickwts)
+ei.0 <- chickwts.lmh0$residuals
+B <- 1000L
+fval.b <- numeric(B)
+for (i in 1:B) {
+  ei.b <- sample(ei.0, replace = TRUE)
+  y.b <- coef(chickwts.lmh0)[1] + ei.b
+  x.b <- chickwts$feed
+  fit.boot <- lm(y.b ~ x.b)
+  fval.b[i] <- anova(fit.boot)$`F value`[1]
+}
+```
+
+```{r}
+hist(fval.b, nclass = 50, xlim = c(0, 20))
+abline(v = 15.365, col = "red")
+```
+
+### Question 1.3
+
+Use permutations test to test the null hypothesis of no diet effect.
+
+```{r}
+B <- 1000L
+fval.boot <- numeric(B)
+for (i in 1:B) {
+  feed.b <- sample(chickwts$feed, replace = FALSE)
+  fit.b <- lm(chickwts$weight ~ feed.b)
+  fval.boot[i] <- anova(fit.b)$`F value`[1]
+}
+```
+
+```{r}
+hist(fval.boot, nclass = 50)
+abline(v = 15.365, col = "red")
+```
+
+### Question 1.4
+
+Let $\theta = \mu_{sunflower} - \mu_{soybean}$ be the mean difference between the Sunflower and Soybean diet groups. Estimate $\theta$ and construct a 90% C.I. for $\theta$ using a parametric bootstrap.
+
+```{r}
+x <- relevel(chickwts$feed, "soybean")
+y <- chickwts$weight
+param.lm <- lm(y ~ x)
+
+B <- 1000L
+coef.b <- matrix(nrow = B, ncol = nlevels(x))
+n <- length(x)
+for (i in 1:B) {
+  y.b <- rnorm(n, mean = predict(param.lm), sd = sd(param.lm$residuals))
+  fit.boot <- lm(y.b ~ x)
+  coef.b[i, ] <- coef(fit.boot)
+}
+
+```
+
+```{r}
+theta.b <- coef.b[, 6]
+hist(theta.b, nclass = 50)
+abline(v = quantile(theta.b, probs = c(0.95, 0.05)), col = "red")
+abline(v = coef(param.lm)[6], col = "blue")
+```
+
+## Part 2
+
+### Question 2.1
+
+In this question we focused on the Computers dataset that can be accessed via the R package Ecdat. Make sure you install the package Ecdat in order to access the data. This data shows the prices of Personal Computers from 1993 until 1995. It contains with 6259 observations on 10 variables. Visit https://rdrr.io/cran/Ecdat/man/Computers.html to read more about the data set. Use the code below to acsess the data.
+
+```{r}
+library(Ecdat)
+data("Computers")
+names(Computers)
+```
+
+```{r}
+head(Computers)
+```
+
+let us focus on the variables “price in US dollars of 486 PCs” (the variable price in the dataset) and size of hard drive in MB (the variable hd in the dataset). Let $Y_i$ be the price and $X_i$ be the size of hard drive in MB.
+
+```{r}
+plot(Computers$hd, Computers$price)
+```
+
+We consider the following regression model:
+
+$$
+Y_i = \beta_0 + \beta_1 X_i + \epsilon_i
+$$
+### Question 2.1
+
+Estimate the model using the classical OLS approach.
+
+```{r}
+Computers.lm <- lm(price ~ hd, data = Computers)
+mean(abs(Computers.lm$residuals))
+mean(Computers.lm$residuals^2)
+summary(Computers.lm)
+
+```
+
+```{r}
+par(mfrow = c(1, 2))
+plot(Computers$hd, Computers.lm$residuals)
+abline(1, 0)
+
+hist(Computers.lm$residuals, nclass = 50)
+```
+
+### Question 2.3
+
+```{r}
+k <- 10
+folds <- sample(rep(1:k, length.out = nrow(Computers)))
+mae <- mse <- numeric(k)
+for (i in 1:k) {
+  train_index <- which(folds != i)
+  test_index <- which(folds == i)
+  
+  train_data <- Computers[train_index, ]
+  test_data <- Computers[test_index, ]
+  
+  model <- lm(price ~ hd, data = train_data)
+  
+  predictions <- predict(model, newdata = test_data)
+  
+  mae[i] <- mean(abs(test_data$price - predictions))
+  mse[i] <- mean((test_data$price - predictions)^2)
+}
+
+```
+
+```{r}
+mean(mae)
+mean(mse)
+```
+
+### Question 2.4
+
+Use leave one out cross validation to investigate the change in the slope estimate $\hat{\beta_1}$ as the data change and visualize this change in a graphical display
+
+```{r}
+n <- nrow(Computers)
+fit.cv <- beta.cv <- numeric(n)
+for (i in 1:n) {
+  x.cv <- Computers$hd[-i]
+  y.cv <- Computers$price[-i]
+  model <- lm(y.cv ~ x.cv)
+  beta.cv[i] <- coef(model)[2]
+  fit.cv[i] <- coef(model)[1] + coef(model)[2] * Computers$hd[i]
+}
+```
+
+```{r}
+res.cv <- Computers$price - fit.cv
+mean(abs(res.cv))
+mean(res.cv^2)
+```
+```{r}
+plot(Computers$hd, beta.cv)
+abline(coef(Computers.lm)[2],0)
+```
+
+Use a bootstrap procedure to construct a 95% C.I. for the predicted values (i.e., the regression line) of the model
+
+```{r}
+n <- nrow(Computers)
+B <- 1000L
+coef.b <- matrix(ncol = 2, nrow = B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  fit.boot <- lm(price ~ hd, data = Computers[index.b, ])
+  coef.b[i, ] <- coef(fit.boot)
+}
+```
+
+```{r}
+quantile(coef.b[, 2], probs = c(0.025, 0.975))
+
+```
+
+
+```{r}
+plot(price ~ hd, data = Computers)
+abline(Computers.lm)
+
+coef.ci <- coef.b[coef.b[, 2] >= 0.92 & coef.b[, 2] <= 1.02, ]
+for(i in 1:nrow(coef.ci)) {
+  abline(a = coef.ci[i,1], b = coef.ci[i, 2], col = "green")
+}
+```
+
+## Part 3
+
+In this question we use the same model formulated in Q2.
+
+### Question 3.1
+
+Use non parametric bootstrap to constract a 95% C.I for $SE(\hat{\beta_0})$ and $SE(\hat{\beta_1})$
+
+```{r}
+n <- nrow(Computers)
+B <- 1000L
+coef.b <- matrix(ncol = 2, nrow = B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  fit.boot <- lm(price ~ hd, data = Computers[index.b, ])
+  coef.b[i, ] <- coef(fit.boot)
+}
+
+quantile(coef.b[, 1], probs = c(0.025, 0.975))
+quantile(coef.b[, 2], probs = c(0.025, 0.975))
+```
+
+```{r}
+par(mfrow = c(1,2))
+hist(coef.b[, 1], nclass = 50)
+abline(v = quantile(coef.b[, 1], probs = c(0.025, 0.975)), col = "red")
+
+hist(coef.b[, 2], nclass = 50)
+abline(v = quantile(coef.b[, 2], probs = c(0.025, 0.975)), col = "red")
+```
+
+### Question 3.2
+
+Explain and illustrate how can you use a bootstrap procedure to investigate the influence of the observations for which the hard drive size is larger than 2000 MB. In your illustration, use the estimates for the $SE(\hat{\beta_0})$ and $SE(\hat{\beta_1})$ that were calculated in Q3.1
+
+TODO
+
+## Part 4
+
+Consider a sample of 20 observations from a population with mean $\mu$:
+
+```{r}
+x<-c(0.68446806,-0.02596037,-0.90015774,0.72892605,-0.45612255, 0.19311847,
+-0.13297109, -0.99845382, 0.37278006, -0.20371894, -0.15468803, 0.19298230
+, -0.42755534, -0.04704525, 0.15273726, 0.03655799, 0.01315016, -0.59121428,
+4.50955771, 2.87272653)
+length(x)
+```
+
+### Question 4.1
+
+Estimate 𝜇 using the mean and the median.
+
+```{r}
+mean(x)
+median(x)
+```
+
+### Question 4.2
+
+Approximate the distribution of the sample mean and the median using non parametric bootstrap with B=1000.
+
+```{r}
+B <- 1000L
+mean.b <- median.b <- numeric(B)
+for (i in 1:B) {
+  x.b <- sample(x, replace = TRUE)
+  mean.b[i] <- mean(x.b)
+  median.b[i] <- median(x.b)
+}
+```
+
+```{r}
+par(mfrow = c(1,2))
+hist(mean.b, nclass = 50)
+hist(median.b, nclass = 50)
+```
+
+### Question 4.3
+
+Estimate the standard error of the sample mean and the median and calculate 95% C.I for the sample mean and median using a semi parametric bootstrap.
+
+```{r}
+lm0 <- lm(x ~ 1)
+e0 <- lm0$residuals
+B <- 1000L
+mean.semib <- median.semib <- numeric(B)
+for (i in 1:B) {
+  e.b <- sample(e0, replace = TRUE)
+  x.b <- coef(lm0)[1] + e.b
+  mean.semib[i] <- mean(x.b)
+  median.semib[i] <- median(x.b)
+}
+```
+
+```{r}
+sd(mean.semib)
+sd(median.semib)
+
+quantile(mean.semib, probs = c(0.025, 0.975))
+quantile(median.semib, probs = c(0.025, 0.975))
+```
+### Question 4.4
+
+Estimate the MSE for the mean and the median using jackknife, which parameter estimate you prefer to use?
+
+```{r}
+n <- length(x)
+mean.jk <- median.jk <- numeric(n)
+for (i in 1:n) {
+  x.jk <- x[-i]
+  mean.jk <- mean(x.jk)
+  median.jk <- median(x.jk)
+}
+```
+
+```{r}
+(n - 1) * mean((mean.jk - mean(x))^2)
+(n - 1) * mean((median.jk - median(x))^2)
+```
+
+### Question 4.5
+
+Let M be the median and let $\pi_{M < 0} = P(M < 0)$. Estimate $\pi_{M < 0}$ , estimate the distribution of $\hat{\pi}_{M < 0}$ and construct a 95% C.I. for $\pi_{M < 0}$.
+
+```{r}
+B <- 10000L
+prob.b <- numeric(B)
+for (i in 1:B) {
+  x.b <- sample(x, replace = TRUE)
+  prob.b[i] <- ifelse(median(x.b) < 0, 1, 0)
+}
+
+mean(prob.b)
+sd(prob.b)
+```
+
+
+
