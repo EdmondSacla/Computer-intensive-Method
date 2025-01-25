@@ -1,0 +1,995 @@
+---
+title: |
+  **2nd-Year Master of Statistics and Data Science**
+  **Computer Intensive Methods: Final projects (2024/2025**
+  **Project 1**
+author: |
+  Name:  Edmond SACLA AIDE (2159278)
+  Lecturer: Prof. Ziv
+  
+date: |
+  2025-01-26
+  
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+header-includes:
+ - \usepackage{float}
+ - \usepackage{titling}
+ - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
+ - \posttitle{\end{center}}
+---
+\pagebreak
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# loading packages
+library(tidyverse)
+library(ggplot2)
+library("DAAG")
+library("robust")
+library(parallel)
+library(glm2)
+```
+
+
+
+# Project 1
+
+In this project, in all questions, we focused on the nassCDS data which is a US data from police-reported car crashes (1997-2002) in which there is a harmful event (people or property). Data are restricted to front-seat occupants, include only a subset of the variables recorded. More information about the dataset can be found using the following link: https://www.rdocumentation.org/packages/DAAG/versions/1.22/topics/nassCDS. The data is a part of the DAAG R package. To get an access to the data you first need to install the package. The list of variables names is shown below.
+
+```{r ,echo=FALSE, include=FALSE}
+data(nassCDS)
+nassCDS <- na.omit(nassCDS)
+names(nassCDS)
+nassCDS$Dead<- ifelse(nassCDS$dead=="dead", 1,0)
+```
+
+```{r, echo=FALSE, include=FALSE}
+dim(nassCDS)
+```
+
+## Part 1
+
+Let $Y_i$ be an indicator variable which takes the value of 1 if an occupant died in an accident (the variable *dead*) and zero otherwise and $X_i$ be the age of occupant in years (the variable *ageOFocc*). We consider the following GLM:
+
+$g(P(Y_i = 1)) = \beta_0 + \beta_1 X_i$
+
+### Question 1.1
+
+<!-- Estimate the model using a classical GLM approach. -->
+As we are dealing with binary outcome, the model is estimated by a GLM with a binomial family. 
+
+```{r, echo=FALSE}
+glm.daag <- glm(dead ~ ageOFocc, data = nassCDS, family = "binomial")
+summary(glm.daag)
+```
+The age of the occupant influent significantly the probability of death  in an accident at a significant level of 5\%. 
+
+### Question 1.2
+
+<!-- Let $X_{50}$ be the age of occupant for which the probability to die is 0.5, i.e., $P(Y_i = 1) = 0.5$. Estimate $X_{50}$. Use non parametric bootstrap to estimate the distribution of $X_{50}$ and to construct a 95% C.I. for the $X_{50}$ -->
+
+_Estimation of X_50_
+
+$P(Y_i = 1)$=$exp(\beta_0 + \beta_1*X)/ (1+ exp(\beta_0 + \beta_1*X))$
+For $P(Y_i = 1)=0.5$, $exp(\beta_0 + \beta_1*X_{50})/ (1+ exp(\beta_0 + \beta_1*X_{50}))$
+Hence $X_{50}=-\beta_0/\beta_1$
+
+```{r, include=T}
+beta_0 <- coef(glm.daag)[1]
+beta_1 <- coef(glm.daag)[2]
+mel50 <- -beta_0 / beta_1
+sprintf("Median effective level (X_50): %.0f", mel50)
+
+```
+_Non parametric bootstrap_
+The bootstrap algorithm is as follow:
+ - Resample the data with replacement.
+ - Refit the GLM to each bootstrap sample
+ - Compute $X_50= - \beta_0/\beta_1$ for each resample
+ - Generate the empirical distribution of X_50
+ - Compute the mean of X_50 across bootstrap samples
+ - Construct a 95% CI based on the bootstrap distribution. We used percentiles CI.
+
+
+<!-- ```{r, cache=TRUE} -->
+<!-- N <- 1000L -->
+<!-- t.boot <- coef.boot <- matrix(nrow = N, ncol = 2) -->
+<!-- size <- nrow(nassCDS) -->
+<!-- for (i in seq_len(N)) { -->
+<!--   idx <- sample(size, replace = TRUE) -->
+<!--   model <- glm(dead ~ ageOFocc, data = nassCDS[idx, ], family = binomial(link = "logit")) -->
+<!--   coef.boot[i, ] <- coef(model) -->
+<!--   t.boot[i, ] <- summary(model)$coefficients[, 3] -->
+<!-- } -->
+
+<!-- mel.boot <- -coef.boot[, 1] / coef.boot[, 2] -->
+<!-- sprintf("Bootstrap median effective level: %.0f", mean(mel.boot)) -->
+<!-- ``` -->
+
+
+
+
+```{r, include=FALSE}
+set.seed(123)
+n<-length(nassCDS$Dead)
+B<-1000
+beta_0.b<-beta_1.b<- X_50.b<-c(1:B)
+index<-c(1:n)
+
+for (i in 1:B)
+{
+  index.b<-sample(index,n,replace=TRUE)
+  nassCDS.b<-nassCDS[index.b,]
+  fit.glm.b<-glm(nassCDS.b$Dead~nassCDS.b$ageOFocc,family = binomial)
+  beta_0.b<-summary(fit.glm.b)$coeff[1,1]
+  beta_1.b<-summary(fit.glm.b)$coeff[2,1]
+  X_50.b[i]<- -beta_0.b/beta_1.b
+  
+}
+ X_50.b<-unlist(X_50.b)
+ sprintf("Bootstrap median effective level (X_50): %.0f", mean(X_50.b))
+```
+
+```{r, include=T}
+hist( X_50.b, probability = TRUE, nclass = 50)
+ci <- quantile( X_50.b, probs = c(0.025, 0.975))
+abline(v = ci, col = "blue")
+sprintf("Bootstrap CI of the median effective level (X_50): %.0f", ci)
+```
+
+### Question 1.3
+
+ _OR for a unit increased in age_
+The Or for a unit increased in age is calculated as the exponentiation value of $\beta_1$.
+<!-- For the model formulated above, estimate the OR (for a unit increased in age). Use non parametric bootstrap to construct a 95% C.I. for the OR (for a unit increased in age) using the percentile and bootstrap *t* interval methods, which one do you prefer for the parameter OR ? -->
+
+```{r, include=T}
+beta_1 <- coef(glm.daag)[2]
+OR<- exp(beta_1)
+sprintf("OR for a unit increased in age: %.2f", OR)
+```
+
+
+_Non parametric bootstrap to construct a 95% C.I: percentile_
+ - Resample the data with replacement.
+ - Fit the GLM to each bootstrap sample.
+ - Extract $\beta_1$ from each bootstrap fit and compute the OR for each sample.
+ - Use the 2.5th and 97.5th percentiles of the bootstrap distribution of OR to construct the CI.
+
+```{r , include=FALSE}
+set.seed(2025)
+n<-length(nassCDS$Dead)
+B<-1000
+beta_1.b<- OR.b<-c(1:B)
+index<-c(1:n)
+
+for (i in 1:B)
+{
+  index.b<-sample(index,n,replace=TRUE)
+  nassCDS.b<-nassCDS[index.b,]
+  fit.glm.b<-glm(nassCDS.b$Dead~nassCDS.b$ageOFocc,family = binomial)
+  beta_1.b<-summary(fit.glm.b)$coeff[2,1]
+  OR.b[i]<- exp(beta_1.b)
+}
+CI.p<- quantile(OR.b,probs=c(0.025,0.975))
+sprintf("CI for OR : %.3f", CI.p)
+```
+
+_Non parametric bootstrap to construct a 95% C.I:  t interval methods_
+ - Resample the data with replacement.
+ - Fit the GLM to each bootstrap sample.
+ - Extract $\beta_1$ and the related standard error from each bootstrap fit for each sample.
+ - Evaluate for each bootstrap the OR as $exp((\beta_{1.b}-\beta_1)/se(\beta_1))$
+ - Use the 2.5th and 97.5th percentiles of the bootstrap distribution of OR to construct the CI.
+
+```{r , include=FALSE}
+set.seed(2025)
+n<-length(nassCDS$Dead)
+B<-1000
+beta_1.b<- t.OR<- se.OR<- c(1:B)
+index<-c(1:n)
+OR= exp(beta_1)
+
+for(i in 1:B)
+{
+  index.b<-sample(index,n,replace=TRUE)
+  nassCDS.b<-nassCDS[index.b,]
+  fit.glm.b<-glm(nassCDS.b$Dead~nassCDS.b$ageOFocc,family = binomial)
+  beta_1.b<-summary(fit.glm.b)$coeff[2,1]
+  se_beta_1.b<- summary(fit.glm.b)$coeff[2,2]
+  t.OR[i]<- exp((beta_1.b-beta_1)/se_beta_1.b) 
+}
+CI.t<- quantile(t.OR,probs=c(0.025,0.975))
+sprintf("CI for OR : %.3f", CI.t)
+```
+
+The bootstrap t interval is wider compared to the bootstrap percentile interval. We prefer the bootstrap percentile interval. The percentile method is generally preferred for the odds ratio, as the bootstrap-t method assumes symmetry and might not account for the skewness in the OR distribution.
+
+
+### Question 1.4
+
+We focus on the odds ratio (OR) for a unit increased in age. Use parametric bootstrap to test the null hypothesis $H_0: OR = 1$.
+
+Null hypothesis (H_0): : The odds ratio for a unit increase in age (
+OR) is 1. This implies that $\beta1=0$ in the logistic regression model.
+
+Alternative Hypothesis (H_1):The odds ratio is not equal to 1 ($\beta1 \neq0$).
+
+The bootstrap procedure is as follow: 
+ - Fit the GLM to the observed data under H_0, where $\beta1=0$
+ - Simulate response data using the fitted model under H_0
+ - Refit the GLM to each simulated dataset and calculate the test statistic ($\beta1$)
+ - Compare the observed test statistic to the distribution of test statistics from the bootstrap samples.
+
+
+<!-- ```{r} -->
+<!-- fit.daag0 <- glm(dead ~ 1, data = nassCDS, family = binomial(link = "logit")) -->
+<!-- summary(fit.daag0) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- inv.logit <- function(x) { -->
+<!--   exp(x) / (1 + exp(x)) -->
+<!-- } -->
+<!-- prob <- inv.logit(-3.05484) -->
+<!-- prob -->
+<!-- ``` -->
+
+<!-- ```{r, cache=TRUE} -->
+<!-- attach(nassCDS) -->
+
+<!-- N <- 1000L -->
+<!-- t.boot <- coef.boot <- matrix(nrow = N, ncol = 2) -->
+<!-- size <- nrow(nassCDS) -->
+<!-- for (i in seq_len(N)) { -->
+<!--   dead.boot <- rbinom(size, 1, prob) -->
+<!--   model <- glm(dead.boot ~ ageOFocc, family = binomial(link = "logit")) -->
+<!--   coef.boot[i, ] <- coef(model) -->
+<!--   t.boot[i, ] <- summary(model)$coefficients[, 3] -->
+<!-- } -->
+<!-- ``` -->
+
+
+```{r, include=FALSE}
+set.seed(2025)
+# Original model
+model <- glm(dead ~ ageOFocc, data = nassCDS, family = binomial)
+beta1_obs <- coef(model)[2]
+OR_obs <- exp(beta1_obs)
+
+# Fit null model under H0: OR = 1 (beta1 = 0)
+null_model <- glm(dead ~ 1, data = nassCDS, family = binomial)
+
+# Parametric bootstrap
+B <- 1000
+beta1_boot <- numeric(B)
+
+for (i in 1:B) {
+  # Simulate data under H0
+  nassCDS$dead_sim <- rbinom(nrow(nassCDS), 1, fitted(null_model))
+  
+  # Fit GLM to simulated data
+  model_boot <- glm(dead_sim ~ ageOFocc, data = nassCDS, family = binomial)
+  
+  beta1_boot[i] <- coef(model_boot)[2]
+}
+
+# Calculate p-value
+p_value <-(1+sum(beta1_boot >beta1_obs)/(B+1))
+
+# Results
+list(
+  OR_obs = OR_obs,
+  p_value = p_value
+)
+
+```
+
+### Question 1.5
+
+<!-- Let $\pi_{33}$ be the probability of death for an occupant at age 33. Use parametric bootstrap to calculate the standard error for $\pi_{33}$ and construct a 90% C.I. for $\pi_{33}$. -->
+
+The logistic regression model gives:
+\[
+\pi_{33} = \frac{\exp(\beta_0 + \beta_1 \cdot 33)}{1 + \exp(\beta_0 + \beta_1 \cdot 33)}
+\]
+The bootstrap procedure is described as follow:
+ - Fit the GLM to the observed data and estimate $\beta_0$ and $\beta_1$ 
+ - Simulate response data based on the fitted probabilities under the original model.
+ - Refit the GLM to each bootstrap sample.
+ - Calculate $\pi_{33}$ for each refitted model.
+ - Estimate the standard error (SE) of $\pi_{33}$ from the bootstrap distribution.
+ - Construct the 90\% CI using the bootstrap percentiles
+
+
+```{r, cache=TRUE, include=T}
+attach(nassCDS)
+size <- nrow(nassCDS)
+N <- 1000
+newdata <- data.frame(ageOFocc = 33.0)
+pi33.boot <- se_pi33.boot<- numeric(N)
+set.seed(2025)
+for (i in seq_len(N)) {
+  dead.boot <- rbinom(size, 1, predict(glm.daag, type = "response"))
+  model <- glm(dead.boot ~ ageOFocc, family = binomial(link = "logit"))
+  summary(model)
+  pi33.boot[i] <- predict(model, newdata = newdata, type = "response")
+  se_pi33.boot[i]<-sqrt(var(pi33.boot)/length(pi33.boot)) 
+}
+
+sprintf("Standard error for pi_{33} is   : %.2f", mean(se_pi33.boot))
+sprintf("CI for pi_{33} is   : %.2f", quantile(pi33.boot,probs=c(0.025,0.9750)))
+```
+
+
+
+## Part 2
+
+In this question we fit a robust GLM for the model specified in Q1. Use the R package *glmRob* to fit the model.
+
+### Question 2.1
+
+Estimate the model using the R package glmRob.
+
+```{r, include=FALSE}
+glm.rob.daag <- glmRob(dead ~ ageOFocc, data = nassCDS, family = "binomial")
+summary(glm.rob.daag)
+```
+
+### Question 2.2
+
+Use non parametric bootstrap to estimate the SE for the intercept and slope.
+The bootstrap algorithm is as follow:
+ - Resample the data with replacement.
+ - Refit the robust GLM to each bootstrap sample
+ - Compute the intercept and the slope for each bootstrap sample
+ - Generate the empirical distribution of the intercept and the slope
+ - Compute the mean of intercept and the slope across bootstrap samples
+
+
+```{r, cache=TRUE, include=T}
+set.seed(2025)
+x<- nassCDS$ageOFocc
+y<- nassCDS$Dead
+n<-length(nassCDS$Dead)
+B<-500
+SE_beta0<-SE_beta1<-c(1:B)
+index<-c(1:n)
+
+for(i in 1:B)
+{
+  index.b<-sample(x,n,replace=TRUE)
+  ageOFocc.b<-x[index.b]
+  Dead.b<-y[index.b]
+  fit.rob.b<- glmRob(Dead.b ~ ageOFocc.b, family = binomial(), method = "cubif")
+  SE_beta0[i]<-summary(fit.rob.b)$coeff[1,2]
+  SE_beta1[i]<-summary(fit.rob.b)$coeff[2,2]
+}
+sprintf("SE for intercept   : %.2f", mean(SE_beta0))
+sprintf("SE for slope   : %.2f", mean(SE_beta1))
+```
+
+
+<!-- ```{r, cache=TRUE, include=T} -->
+<!-- N <- 500 -->
+<!-- set.seed(2025) -->
+<!-- #rob.coef.boot <- matrix(nrow = N, ncol = 2) -->
+<!-- Intercept.boot<-slope.boot<- numeric(N) -->
+<!-- size <- nrow(nassCDS) -->
+<!-- for (i in seq_len(N)) { -->
+<!--   idx <- sample(size, replace = TRUE) -->
+<!--   model <- glmRob(dead ~ ageOFocc, data = nassCDS[idx,], family = "binomial") -->
+<!--   Intercept.boot[i]<- coef(model)[1] -->
+<!--   slope.boot[i] <- coef(model)[2] -->
+<!--  # rob.coef.boot[i, ] <- coef(model) -->
+<!-- } -->
+<!-- sprintf("SE for intercept   : %.2f", mean(Intercept.boot)) -->
+<!-- sprintf("SE for slope   : %.2f", mean(slope.boot)) -->
+<!-- ``` -->
+
+
+
+```{r, include=T}
+par(mfrow=c(1,2))
+hist(SE_beta0,main="alpha",nclass=25)
+abline(v = quantile(SE_beta0, probs = c(0.025, 0.975)), col = "blue")
+
+hist(SE_beta1,main="beta",nclass=25)
+abline(v = quantile(SE_beta1, probs = c(0.025, 0.975)), col = "blue")
+```
+
+### Question 2.3
+
+Use the jackknife and the bootstrap procedures to estimate the bias and MSE for the intercept and slope estimated by: (1) the GLM model in Q2.1 and (2) the robust GLM model estimated in Q2.2. Which method you prefer to use for the estimation of the intercept and slope?
+
+For each GLM approach, the bias and MSE were evaluated after the sampling procedures: bootstrap and Jackknife.
+
+a.Jackknife:
+Remove one observation at a time.
+Refit the model and calculate the estimates.
+Use jackknife estimates to compute bias and MSE.
+
+b.Bootstrap:
+Resample data (with replacement) many times.
+Refit the model on each bootstrap sample.
+Use bootstrap estimates to compute bias and MSE.
+
+# ```{r, cache=TRUE, include=FALSE}
+# set.seed(2025)
+# # Classical GLM and Robust GLM
+# classical_model <- glm(dead ~ ageOFocc, data = nassCDS, family = binomial)
+# robust_model <- glmRob(dead ~ ageOFocc, data = nassCDS, family = binomial)
+# 
+# # Number of observations
+# n <- nrow(nassCDS)
+# 
+# # Initialize storage for jackknife and bootstrap
+# B <- 1000  # Number of bootstrap samples
+# coef_jack_glm <- matrix(0, n, 2)  # Store jackknife estimates for GLM
+# coef_jack_robust <- matrix(0, n, 2)  # Store jackknife estimates for robust GLM
+# coef_boot_glm <- matrix(0, B, 2)  # Store bootstrap estimates for GLM
+# coef_boot_robust <- matrix(0, B, 2)  # Store bootstrap estimates for robust GLM
+# 
+# # Jackknife procedure
+# for (i in 1:n) {
+#   # Exclude one observation
+#   jack_data <- nassCDS[-i, ]
+#   
+#   # Classical GLM
+#   jack_model_glm <- glm(dead ~ ageOFocc, data = jack_data, family = binomial)
+#   coef_jack_glm[i, ] <- coef(jack_model_glm)
+#   
+#   # Robust GLM
+#   jack_model_robust <- glmRob(dead ~ ageOFocc, data = jack_data, family = binomial)
+#   coef_jack_robust[i, ] <- coef(jack_model_robust)
+# }
+# 
+# # Bootstrap procedure
+# for (b in 1:B) {
+#   # Resample data with replacement
+#   boot_data <- nassCDS[sample(1:n, replace = TRUE), ]
+#   
+#   # Classical GLM
+#   boot_model_glm <- glm(dead ~ ageOFocc, data = boot_data, family = binomial)
+#   coef_boot_glm[b, ] <- coef(boot_model_glm)
+#   
+#   # Robust GLM
+#   boot_model_robust <- glmRob(dead ~ ageOFocc, data = boot_data, family = binomial)
+#   coef_boot_robust[b, ] <- coef(boot_model_robust)
+# }
+# 
+# # Calculate bias and MSE
+# # Original coefficients
+# coef_glm <- coef(classical_model)
+# coef_robust <- coef(robust_model)
+# 
+# # Bias and MSE for Jackknife
+# bias_jack_glm <- colMeans(coef_jack_glm) - coef_glm
+# mse_jack_glm <- bias_jack_glm^2 + apply(coef_jack_glm, 2, var)
+# 
+# bias_jack_robust <- colMeans(coef_jack_robust) - coef_robust
+# mse_jack_robust <- bias_jack_robust^2 + apply(coef_jack_robust, 2, var)
+# 
+# # Bias and MSE for Bootstrap
+# bias_boot_glm <- colMeans(coef_boot_glm) - coef_glm
+# mse_boot_glm <- bias_boot_glm^2 + apply(coef_boot_glm, 2, var)
+# 
+# bias_boot_robust <- colMeans(coef_boot_robust) - coef_robust
+# mse_boot_robust <- bias_boot_robust^2 + apply(coef_boot_robust, 2, var)
+# 
+# # Combine results
+# results <- list(
+#   Jackknife_GLM = list(Bias = bias_jack_glm, MSE = mse_jack_glm),
+#   Jackknife_Robust = list(Bias = bias_jack_robust, MSE = mse_jack_robust),
+#   Bootstrap_GLM = list(Bias = bias_boot_glm, MSE = mse_boot_glm),
+#   Bootstrap_Robust = list(Bias = bias_boot_robust, MSE = mse_boot_robust)
+# )
+# 
+# results
+# ```
+
+
+<!-- _GLM 1_  -->
+
+<!-- _1. bootstrap _ -->
+
+<!-- ```{r, cache=TRUE, include=FALSE} -->
+<!-- beta0r.obs<-betarob_0 -->
+<!-- beta1r.obs<- betarob_1 -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- B<-30 -->
+<!-- index<-c(1:n) -->
+<!-- x<- nassCDS$ageOFocc -->
+<!-- y<- nassCDS$Dead -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- beta0r<-beta1r<-mse_beta0.b <- mse_beta1.b<-  c(1:B) -->
+
+<!-- for(i in 1:B) -->
+<!-- { -->
+<!--   index.b<-sample(x,n,replace=TRUE) -->
+<!--   ageOFocc.b<-x[index.b] -->
+<!--   Dead.b<-y[index.b] -->
+<!--   # Fit the model -->
+<!--   fit.rob.b<- glm(Dead.b ~ ageOFocc.b, family = binomial) -->
+<!--   #Extract coefficient -->
+<!--   beta0r[i]<-summary(fit.rob.b)$coeff[1,1] -->
+<!--   beta1r[i]<-summary(fit.rob.b)$coeff[2,1] -->
+<!--   #MSE for Parameters -->
+<!--   mse_beta0.b[i] <- (beta0r[i] - beta_0)^2 -->
+<!--   mse_beta1.b[i] <- (beta1r[i] - beta_1)^2 -->
+<!-- } -->
+<!--    # bias -->
+<!-- beta0r.b <- mean(beta0r) -->
+<!-- bias_beta0.r <- beta0r.b - beta0r.obs -->
+<!-- sprintf("Bootstrap intercept bias   : %.2f", bias_beta0.r) -->
+
+<!-- beta1r.b <- mean(beta1r) -->
+<!-- bias_beta1.r <- beta1r.b - beta1r.obs -->
+<!-- sprintf("Bootstrap slope bias   : %.2f", bias_beta1.r) -->
+
+
+<!--    # MSE -->
+<!-- mse_beta0.boot <- mean( mse_beta0.b) -->
+<!-- sprintf("Bootstrap intercept MSE   : %.2f", mse_beta0.boot ) -->
+
+<!-- mse_beta1.boot <- mean(mse_beta1.b) -->
+<!-- sprintf("Bootstrap slope MSE   : %.2f", mse_beta1.boot) -->
+<!-- ``` -->
+
+<!-- _2. Jackknife _ -->
+
+<!-- ```{r, cache=TRUE, include=FALSE} -->
+<!-- beta0r.obs<-betarob_0 -->
+<!-- beta1r.obs<- betarob_1 -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- index<-c(1:n) -->
+<!-- x<- nassCDS$ageOFocc -->
+<!-- y<- nassCDS$Dead -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- beta0rj<-beta1rj<- mse_beta0.j <- mse_beta1.j <-c(1:n) -->
+
+<!-- for(i in 1:n) -->
+<!-- { -->
+
+<!--   ageOFocc.j<-x[- c(i)] -->
+<!--   Dead.j<-y[- c(i)] -->
+<!--   # Fit the model -->
+<!--   fit.rob.j<- glm(Dead.j ~ ageOFocc.j, family = binomial) -->
+<!--   #Extract coefficient -->
+<!--   beta0rj[i]<-summary(fit.rob.j)$coeff[1,1] -->
+<!--   beta1rj[i]<-summary(fit.rob.j)$coeff[2,1] -->
+<!--   #MSE for Parameters -->
+<!--   mse_beta0.j[i] <- (beta0rj[i] - beta_0)^2 -->
+<!--   mse_beta1.b[i] <- (beta1rj[i] - beta_1)^2 -->
+<!-- } -->
+
+<!--   # bias -->
+<!-- beta0r.b <- mean(beta0r) -->
+<!-- bias_beta0.r <- beta0r.b - beta0r.obs -->
+<!-- sprintf("Jackknife intercept bias   : %.2f", bias_beta0.r) -->
+
+<!-- beta1r.b <- mean(beta1r) -->
+<!-- bias_beta1.r <- beta1r.b - beta1r.obs -->
+<!-- sprintf("Jackknife slope bias   : %.2f", bias_beta1.r) -->
+
+
+<!--    # MSE -->
+<!-- mse_beta0.boot <- mean( mse_beta0.b) -->
+<!-- sprintf("Jackknife intercept MSE   : %.2f", mse_beta0.boot ) -->
+
+<!-- mse_beta1.boot <- mean(mse_beta1.b) -->
+<!-- sprintf("Jackknife slope MSE   : %.2f", mse_beta1.boot) -->
+<!-- ``` -->
+
+
+<!-- _GLM 2_ -->
+
+<!-- _1. bootstrap _ -->
+<!-- ```{r, cache=TRUE, include=FALSE} -->
+<!-- beta0r.obs<-betarob_0 -->
+<!-- beta1r.obs<- betarob_1 -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- B<-100 -->
+<!-- index<-c(1:n) -->
+<!-- x<- nassCDS$ageOFocc -->
+<!-- y<- nassCDS$Dead -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- beta0r<-beta1r<- mse_beta0.b <- mse_beta1.b<- c(1:B) -->
+
+<!-- for(i in 1:B) -->
+<!-- { -->
+<!--   index.b<-sample(x,n,replace=TRUE) -->
+<!--   ageOFocc.b<-x[index.b] -->
+<!--   Dead.b<-y[index.b] -->
+<!--   # Fit the model -->
+<!--   fit.rob.b<- glmRob(Dead.b ~ ageOFocc.b, family = binomial(), method = "cubif") -->
+<!--   #Extract coefficient -->
+<!--   beta0r[i]<-summary(fit.rob.b)$coeff[1,1] -->
+<!--   beta1r[i]<-summary(fit.rob.b)$coeff[2,1] -->
+<!--   #MSE for Parameters -->
+<!--   mse_beta0.b[i] <- (beta0r[i] - beta_0)^2 -->
+<!--   mse_beta1.b[i] <- (beta1r[i] - beta_1)^2 -->
+<!-- } -->
+<!--    # bias -->
+<!-- beta0r.b <- mean(beta0r) -->
+<!-- bias_beta0.r <- beta0r.b - beta0r.obs -->
+<!-- sprintf("Bootstrap intercept bias   : %.2f", bias_beta0.r) -->
+
+<!-- beta1r.b <- mean(beta1r) -->
+<!-- bias_beta1.r <- beta1r.b - beta1r.obs -->
+<!-- sprintf("Bootstrap slope bias   : %.2f", bias_beta1.r) -->
+
+
+<!--    # MSE -->
+<!-- mse_beta0.boot <- mean( mse_beta0.b) -->
+<!-- sprintf("Bootstrap intercept MSE   : %.2f", mse_beta0.boot ) -->
+
+<!-- mse_beta1.boot <- mean(mse_beta1.b) -->
+<!-- sprintf("Bootstrap slope MSE   : %.2f", mse_beta1.boot) -->
+<!-- ``` -->
+
+
+
+<!-- _2. Jackknife _ -->
+
+<!-- ```{r, cache=TRUE, include=FALSE} -->
+<!-- beta0r.obs<-betarob_0 -->
+<!-- beta1r.obs<- betarob_1 -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- index<-c(1:n) -->
+<!-- x<- nassCDS$ageOFocc -->
+<!-- y<- nassCDS$Dead -->
+<!-- n<-length(nassCDS$Dead) -->
+<!-- beta0rj<-beta1rj<- mse_beta0.j <- mse_beta1.j <- c(1:n) -->
+
+<!-- for(i in 1:n) -->
+<!-- { -->
+<!--   cat(i) -->
+<!--   ageOFocc.j<-x[- c(i)] -->
+<!--   Dead.j<-y[- c(i)] -->
+<!--   # Fit the model -->
+<!--   fit.rob.j<- glmRob(Dead.j ~ ageOFocc.j, family = binomial(), method = "cubif") -->
+<!--   #Extract coefficient -->
+<!--   beta0rj[i]<-summary(fit.rob.j)$coeff[1,1] -->
+<!--   beta1rj[i]<-summary(fit.rob.j)$coeff[2,1] -->
+<!--   #MSE for Parameters -->
+<!--   mse_beta0.j[i] <- (beta0rj[i] - beta_0)^2 -->
+<!--   mse_beta1.b[i] <- (beta1rj[i] - beta_1)^2 -->
+<!-- } -->
+
+<!--   # bias -->
+<!-- beta0r.b <- mean(beta0r) -->
+<!-- bias_beta0.r <- beta0r.b - beta0r.obs -->
+<!-- sprintf("Jackknife intercept bias   : %.2f", bias_beta0.r) -->
+
+<!-- beta1r.b <- mean(beta1r) -->
+<!-- bias_beta1.r <- beta1r.b - beta1r.obs -->
+<!-- sprintf("Jackknife slope bias   : %.2f", bias_beta1.r) -->
+
+
+<!--    # MSE -->
+<!-- mse_beta0.boot <- mean( mse_beta0.b) -->
+<!-- sprintf("Jackknife intercept MSE   : %.2f", mse_beta0.boot ) -->
+
+<!-- mse_beta1.boot <- mean(mse_beta1.b) -->
+<!-- sprintf("Jackknife slope MSE   : %.2f", mse_beta1.boot) -->
+<!-- ``` -->
+
+
+## Part 3
+
+In this question we focus of the following 2 × 2 table (for the complete case analysis) for the variables airbag and dead.
+
+
+### Question 3.1
+
+Define the observation unit ($X_i$, $Y_i$) for the question
+
+```{r, include=T}
+bag.dead <- matrix(c(11058, 13825, 669, 511), nrow = 2, 
+                dimnames = list(c("none", "airbag"), c("alive", "dead")))
+
+addmargins(bag.dead)
+```
+### Question 3.2
+The OR is less than 1, airbags are associated with decreased odds of survival.
+<!-- Calculate the odds ratio for usage of airbag and the accident outcome (dead/alive) and construct 95% confidence interval. You can use the R function oddsratio. What is your conclusions ? Do you think that airbags in the car influence the accident outcome ? -->
+
+```{r, include=FALSE}
+epitools::oddsratio(bag.dead, method = "wald")
+```
+
+
+### Question 3.3: Parametric bootstrap to construct a construct a 95% confidence interval for the OR.
+
+Simulate B samples from the multinomial distribution using the observed cell proportions. 
+For each bootstrap sample:
+  - Reconstruct the contingency table.
+  - Compute the odds ratio
+
+
+```{r, cache=TRUE, include=T}
+# Convert counts to proportions
+total <- sum(bag.dead )
+proportions <- bag.dead  / total
+
+# Function to calculate the odds ratio
+calc_or <- function(table) {
+  alive_none <- table[1, 1]
+  dead_none <- table[1, 2]
+  alive_airbag <- table[2, 1]
+  dead_airbag <- table[2, 2]
+  (alive_none / dead_none)/ (alive_airbag / dead_airbag)
+}
+
+# Parametric bootstrap
+set.seed(2025)
+B <- 1000
+ORs <- numeric(B)
+
+for (i in 1:B) {
+  # Generate bootstrap sample
+  bootstrap_sample <- rmultinom(1, size = total, prob = as.vector(proportions))
+  bootstrap_table <- matrix(bootstrap_sample, nrow = 2, byrow = TRUE)
+  
+  # Calculate odds ratio for the bootstrap sample
+  mean(ORs)
+  ORs[i] <- calc_or(bootstrap_table)
+}
+
+# 95% Confidence Interval
+ hist(ORs,nclass=50)
+abline(v = quantile(ORs, probs = c(0.025, 0.975)), col = "red")
+OR<- mean(ORs)
+ci <- quantile(ORs, probs = c(0.05, 0.950))
+sprintf("CI for OR   : %.2f", ci)
+```
+
+
+```{r, cache=TRUE, include=T}
+B <- 100L
+n.nobag <- 669 + 11058
+n.airbag <- 511 + 13825
+p.nobag <- 669 / n.nobag
+p.airbag <- 511 / n.airbag
+ors.b <- numeric(B)
+set.seed(2025)
+for (i in seq_len(B)) {
+  s1 <- sum(rbinom(n.nobag, 1, p.nobag))
+  s2 <- sum(rbinom(n.airbag, 1, p.airbag))
+  ors.b[i] <- epitools::oddsratio(c(n.nobag - s1, s1, n.airbag - s2, s2))$measure[2,1]
+}
+
+mean(ors.b)
+quantile(ors.b, probs = c(0.025, 0.975))
+```
+
+```{r, include=T}
+hist(ors.b, nclass = 50)
+abline(v = quantile(ors.b, probs = c(0.025, 0.975)), col = "red")
+```
+
+### Question 3.4
+
+<!-- Use permutations test to test the hypothesis that airbags in the car DO NOT influence the accident outcome using a chi-square test for a 2 × 2 table. Compare the distribution of the chi-square test statistic in this question to the theoretical distribution of the test statistic. -->
+
+Null Hypothesis ($H_0$):Airbags have no effect on the accident outcome (i.e., the rows and columns of the table are independent).
+The permutation test est performed as follow:
+ - Use the observed 2X2 table, table to calculate the test statistic
+ - Permutations Under the Null:
+    --> Shuffle the outcome labels ("Alive" or "Dead") randomly, keeping the marginal totals fixed.
+    --> For each permutation, create a new 2X2 table and compute the test statistic
+ - Calculate the p-value:
+    --> Compare the observed test statistic to the distribution of test statistics from the permutations.
+
+```{r, include=T}
+# Observed chi-square test statistic
+observed_test <- chisq.test(bag.dead, correct = FALSE)
+observed_stat <- observed_test$statistic
+
+# Permutation test
+set.seed(2025)
+B <- 10000
+permuted_stats <- numeric(B)
+
+# Marginal totals
+row_totals <- rowSums(bag.dead)
+col_totals <- colSums(bag.dead)
+total <- sum(bag.dead)
+
+for (i in 1:B) {
+  # Generate a permuted table under the null hypothesis
+  permuted_table <- matrix(rmultinom(1, total, prob = outer(row_totals, col_totals, "*") / total^2),
+                           nrow = 2)
+  
+  # Compute chi-square test statistic for permuted table
+  permuted_test <- chisq.test(permuted_table, correct = FALSE)
+  permuted_stats[i] <- permuted_test$statistic
+}
+
+# Calculate p-value
+hist(permuted_stats,nclass=50,probability=TRUE)
+p_value<- (1+sum(permuted_stats>observed_stat))/(B+1)
+p_value
+```
+
+p-value=9.999e-05. We reject the $H_0$ => airbags in the car influences significantly the accident outcome.
+
+The distributions align well, the theoretical chi-square distribution is a good approximation for the test statistic under the null hypothesis. 
+```{r, include=T}
+# Plot the distributions
+hist(permuted_stats, breaks = 30, probability = TRUE, 
+     col = "skyblue", main = "Comparison of Chi-Square Distributions",
+     xlab = "Chi-Square Test Statistic")
+curve(dchisq(x, df = 1), col = "red", lwd = 2, add = TRUE)
+
+legend("topright", legend = c("Permutation Test (Empirical)", "Chi-Square (Theoretical)"),
+       col = c("skyblue", "red"), lwd = 2)
+```
+
+
+## Part 4
+
+If this question we focus on the variables dead (the outcome of the accident) and the gender (the variable sex).
+
+
+### Question 4.1
+
+To estimate the proportion of males (𝜋𝑀) and female (𝜋𝐹) that died in the accidents, we calculated the proportion of deaths within each gender category.
+The formula for each proportion is:
+
+\[
+\pi_M = \frac{\text{Number of males who died}}{\text{Total number of males}}
+\]
+
+\[
+\pi_F = \frac{\text{Number of females who died}}{\text{Total number of females}}
+\]
+
+```{r, include=T}
+sex.died <- with(nassCDS, table(sex, dead))
+n.total <- sum(sex.died)
+n.male <- 716 + 13253
+n.female <- 464 + 11784
+p.male <- 716 / n.male
+p.female <- 464 / n.female
+
+sprintf("The proportion of male  that died in the accidents is  : %.3f", p.male)
+
+sprintf("The proportion of female that died in the accidents is  : %.3f", p.female)
+```
+
+
+
+### Question 4.2
+
+Test the hypothesis that the proportion of male and female that died in an accident are equal using a classical two-samples test (use a two sided test).
+
+Null hypothesis ($H_0$): $𝜋_𝑀=𝜋_F$
+Alternative hypothesis ($H_A$): $𝜋_𝑀\neq𝜋_F$
+```{r, include=T}
+
+# Data
+f_alive <- 11784
+f_dead <- 464
+m_alive <- 13253
+m_dead <- 716
+
+# Total counts
+f_total <- f_alive + f_dead
+m_total <- m_alive + m_dead
+
+# Proportions
+pi_F <- f_dead / f_total
+pi_M <- m_dead / m_total
+
+# Pooled proportion
+pooled_pi <- (f_dead + m_dead) / (f_total + m_total)
+
+# Test statistic
+z_stat <- (pi_M - pi_F) / sqrt(pooled_pi * (1 - pooled_pi) * (1 / f_total + 1 / m_total))
+
+# p-value for two-sided test
+p_value <- 2 * (1 - pnorm(abs(z_stat)))
+
+
+# Decision
+if (p_value < 0.05) {
+  cat("Reject the null hypothesis: The proportions are significantly different.\n")
+} else {
+  cat("Fail to reject the null hypothesis: No significant difference in proportions.\n")
+}
+```
+
+<!-- ```{r, include=FALSE} -->
+<!-- prop.test(sex.died, correct = FALSE) -->
+<!-- ``` -->
+
+
+### Question 4.3
+
+Use parametric bootstrap to test the hypothesis that the proportion of male and female that died in an accidents are equal against a two sided alternative.
+
+Under $H_0$, the proportion of males and females who died are the same. The pooled proportion $\pi^{hat}$ is the same for both groups. The bootstrap procedure is as follow:
+ - Under the null, generate new datasets by randomly sampling deaths for both males and females based on the pooled proportion $\pi^{hat}$, while keeping the sample sizes fixed (the number of males and females).
+ - For each bootstrap sample, calculate the difference in proportions between the males and females who died.
+ - Compute the p-value by comparing the observed test statistic to the distribution of the bootstrapped test statistics and make decision.
+
+```{r, include=T}
+set.seed(2025)
+# Bootstrap settings
+B <- 10000  
+boot_stat <- numeric(B)
+
+# Bootstrap process
+for (i in 1:B) {
+  # Simulate deaths based on the pooled proportion
+  f_boot <- rbinom(1, f_total, pooled_pi)
+  m_boot <- rbinom(1, m_total, pooled_pi)
+  
+  # Compute the difference in proportions for the bootstrap sample
+  boot_stat[i] <- (f_boot / f_total) - (m_boot / m_total)
+}
+
+# Observed difference in proportions
+obs_diff <- pi_F - pi_M
+
+# Compute p-value by comparing observed difference to bootstrap distribution
+p_value <-(1+sum(abs(boot_stat) > abs(obs_diff)))/(B+1)
+
+# Conclusion based on p-value
+if (p_value < 0.05) {
+  cat("Reject the null hypothesis: The proportions are significantly different.\n")
+} else {
+  cat("Fail to reject the null hypothesis: No significant difference in proportions.\n")
+}
+```
+p-value=9.999e-05. The p-value is less than 0.05, you would reject the null hypothesis and conclude that there is a statistically significant difference in the proportions of males and females who died in accidents.
+
+
+
+### Question 4.4
+
+The non-parametric bootstrap procedure to construct a 95% confident interval for $𝜋𝑀 − 𝜋𝐹$ is described as follow:
+ - calculate the observed difference in proportions $𝜋𝑀 − 𝜋𝐹$ from the original data. 
+ - Create bootstrap samples by resampling with replacement from the observed data for both males and females.
+ - For each bootstrap sample, calculate the difference in proportions between males and females.
+ - Construct the 95\% percentiles Confidence Interval.
+
+```{r, include=T}
+set.seed(2025)
+
+# Observed difference in proportions
+obs_diff <- pi_M - pi_F
+
+# Bootstrap settings
+B <- 10000  
+boot_diff <- numeric(B)
+
+# Non-parametric bootstrap process
+for (i in 1:B) {
+  # Resample males and females with replacement
+  f_boot <- sample(c(rep(1, f_dead), rep(0, f_total - f_dead)), f_total, replace = TRUE)
+  m_boot <- sample(c(rep(1, m_dead), rep(0, m_total - m_dead)), m_total, replace = TRUE)
+  
+  # Compute the difference in proportions for the bootstrap sample
+  boot_diff[i] <- mean(f_boot) - mean(m_boot)
+}
+
+# Calculate the 95% confidence interval from the bootstrap distribution
+hist(boot_diff,nclass=100)
+CI<- quantile(boot_diff,probs=c(0.025,0.975))
+
+sprintf("The difference in the proportion is  : %.3f", CI)
+```
+
+The CI 95\% CI: [-0.018, 0.008]. 
+The CI does not contain zero: Reject the null hypothesis, suggesting a significant difference between the proportions of males and females who died.
+
+
+
