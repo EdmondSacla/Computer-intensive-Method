@@ -1,0 +1,603 @@
+---
+title: |
+  **2nd-Year Master of Statistics and Data Science**
+  **Computer Intensive Methods: Final projects (2024/2025**
+  **Project 2**
+author: |
+  Name:  Edmond SACLA AIDE (2159278)
+  Lecturer: Prof. Ziv
+  
+date: |
+  2024-12-08
+  
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+header-includes:
+ - \usepackage{float}
+ - \usepackage{titling}
+ - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
+ - \posttitle{\end{center}}
+---
+\pagebreak
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# loading packages
+library(tidyverse)
+library(ggplot2)
+library("DAAG")
+library("robust")
+library(parallel)
+library(glm2)
+```
+
+
+
+# Project 2
+
+In this question we use the horseshoe crab dataset. The data is available in R (crabs) as a part of the R package glm2. To get the data, install the package glm2 and use the code below to access the data.
+
+```{r, include=FALSE}
+library(glm2)
+data(crabs)
+names(crabs)
+```
+
+```{r, include=FALSE}
+plot(crabs$Width, crabs$Satellites)
+```
+
+The dataset contains information about of 173 female horseshoe crab. You can find more details about this dataset in the book of Alen Agresti (An Introduction to Categorical Data Analysis, Section 3.3.2). The first 6 lines are given below.
+
+```{r, include=FALSE}
+head(crabs)
+```
+
+Each female horseshoe crab in the study had a male crab attached to her nest. The study investigated factors that affect whether the female crab had any other males, **called satellites**, residing nearby her. The response outcome for each female crab is her number of satellites (*Satellites*). In this question, possible explanatory variables are the female crab’s shell width (*Width*), which is a summary of her size and a binary factor indicating whether the female has good spine condition (yes or no, in R: *GoodSpine*)
+
+## Part 1
+
+### Question 1.1
+
+Let $Y_i$ be the number of satellites,we assume that $Y_i ~ Poisson(\mu_i)$ where $\mu_i$ denotes the expected number of satellites for the i-th female crab. We consider the following linear predictor:
+
+$$
+g(\mu_i) =  \beta_0 + \beta_1 * Width_i + \beta_2 * GoodSpine_i.
+$$
+
+Here, $g()$ is the link function. Formulate an appropriate model for the number satellites. Fit the model and use the likelihood ratio test in order to test the null hypothesis $H_0: \beta_2 = 0$ against a two sided alternative.
+
+The response variable \(Y_i\) (number of satellites) follows a Poisson distribution:
+
+\[
+Y_i \sim \text{Poisson}(\mu_i)
+\]
+
+The expected number of satellites (\(\mu_i\)) is modeled using a log-link function:
+
+\[
+\log(\mu_i) = \beta_0 + \beta_1 \times \text{Width}_i + \beta_2 \times \text{GoodSpine}_i
+\]
+
+Here:
+
+- \(\beta_0\): Intercept term
+- \(\beta_1\): Effect of shell width
+- \(\beta_2\): Effect of spine condition (\(\text{GoodSpine}_i\), a binary factor)
+
+
+
+```{r}
+crabs_glm_v2 <- glm(Satellites ~ Width + GoodSpine, data = crabs, family = "poisson")
+summary(crabs_glm_v2)
+```
+
+Likelihood Ratio Test for \(H_0 : \beta_2 = 0\)
+
+_Hypotheses_:
+
+- \(H_0 : \beta_2 = 0\) (GoodSpine has no effect on the number of satellites)
+- \(H_a : \beta_2 \neq 0\) (GoodSpine has an effect)
+
+```{r}
+crabs_glm_v1 <- glm(Satellites ~ Width,             data = crabs, family = "poisson")
+crabs_glm_v2 <- glm(Satellites ~ Width + GoodSpine, data = crabs, family = "poisson")
+
+teststat <- as.numeric(-2 * (logLik(crabs_glm_v1) - logLik(crabs_glm_v2)))
+p_value<-pchisq(teststat, df = 1, lower.tail = FALSE)
+sprintf("likelihood ratio test (p-value): %.3f", p_value)
+```
+
+$RH_0$, there is significant different between the two models.Therefore it is important to keep _good spine condition_ as a predictor of number of satellites.
+
+
+### Question 1.2
+
+Use parametric and non parametric bootstrap to test the null hypothesis in Q1.1. Compare the distribution of the likelihood ratio statistic obtained for the two bootstrap procedures to the theoretical distribution of the likelihood ratio test, what is you conclusion ?
+
+
+- Test statistic: 
+D=−2⋅(loglikelihood of reduce model−loglikelihood of full model)
+-Theoretical distribution under $H_0$:\(D \sim \chi^2_1\)
+We will now obtain the bootstrap distribution of 𝐷using parametric and non-parametric methods.
+
+Parametric Bootstrap
+- Simulate data under the null hypothesis (reduced model: \text{satell} \sim \text{Poisson}(\mu) with only Width as an explanatory variable)
+-Refit the full and reduced models for each bootstrap sample
+-Compute the likelihood ratio statistic D* for each sample.
+
+Non-Parametric Bootstrap
+-Resample the data (with replacement) from the observed dataset
+-Fit the full and reduced models for each bootstrap sample.
+-Compute the likelihood ratio statistic D* for each sample.
+
+
+```{r}
+lambda <- mean(crabs$Satellites)
+n <- nrow(crabs)
+B <- 1000
+
+# Parametric
+lrt_para <- c()
+set.seed(2025)
+for (i in 1:B) {
+  Sat_boot <- rpois(n, lambda)
+  crab_boot_1 <- glm(Sat_boot ~ crabs$Width, family = poisson())
+  crab_boot_2 <- glm(Sat_boot ~ crabs$Width + crabs$GoodSpine, family = poisson())
+  lrt_para[i] <- -2*(logLik(crab_boot_1)[1] - logLik(crab_boot_2)[1])
+  
+}
+
+# Non-parametric
+lrt_nonpara <- c()
+set.seed(2025)
+for (i in 1:B) {
+  Sat_boot <- sample(crabs$Satellites, n, replace = T)
+  crab_boot_1 <- glm(Sat_boot ~ crabs$Width, family = poisson())
+  crab_boot_2 <- glm(Sat_boot ~ crabs$Width + crabs$GoodSpine, family = poisson())
+  lrt_nonpara[i] <- -2*(logLik(crab_boot_1)[1] - logLik(crab_boot_2)[1])
+}
+par(mfrow = c(1, 2))
+hist(lrt_para, main = "Parametric")
+hist(lrt_nonpara, main = "Non-parametric")
+par(mfrow = c(1, 1))
+
+# Observed lrt
+lrt_obs<-qchisq(0.95, df=1)
+# P-values
+p1<- (1 + sum(lrt_para > lrt_obs))/(1 + B) 
+p2<-(1 + sum(lrt_nonpara > lrt_obs))/(1 + B)
+
+#p2<-pchisq(mean(lrt_para), df = 1, lower.tail = FALSE)
+#p1<-pchisq(mean(lrt_nonpara), df = 1, lower.tail = FALSE)
+sprintf("likelihood ratio test using parametric bootstrap (p-value): %.3f", p1)
+sprintf("likelihood ratio test using non-parametric bootstrap (p-value): %.3f", p2)
+```
+
+At a significance level of 5\%, only the parametric bootstrap seems to identify a significant effect of _good spine condition_.
+
+Compare Distributions
+```{r}
+# Plot histograms of the bootstrap distributions
+hist(lrt_para, breaks = 50, probability = TRUE, col = "skyblue", main = "Parametric vs Non-Parametric Bootstrap",
+     xlab = "Likelihood Ratio Statistic (D)")
+hist(lrt_nonpara, breaks = 50, probability = TRUE, col = rgb(1, 0, 0, 0.5), add = TRUE)
+
+# Overlay the theoretical chi-squared distribution
+curve(dchisq(x, df = 1), col = "blue", lwd = 2, add = TRUE)
+
+legend("topright", legend = c("Parametric", "Non-Parametric", "Chi-squared"),
+       col = c("skyblue", "red", "blue"), lwd = 2)
+```
+The non-parametric bootstrap distributions deviate significantly theoretical \chi^2_1\ distribution, this suggest that the theoretical distribution does not fully capture the data's behavior under the null hypothesis.
+
+The parametric bootstrap distributions aligns somehow the theoretical \chi^2_1\ distribution, this suggest that the theoretical distribution more or less y capture the data's behavior under the null hypothesis.
+
+### Question 1.3
+
+Use permutations test to test the null hypothesis formulated in Q1.1
+
+```{r}
+attach(crabs)
+B <- 1000L
+size <- nrow(crabs)
+lr.perm <- numeric(B)
+for (i in 1:B) {
+  satellites.b <- sample(Satellites, replace = FALSE)
+  m1 <- glm(satellites.b ~ Width, family = "poisson")
+  m2 <- glm(satellites.b ~ Width + GoodSpine, family = "poisson")
+  lr.perm[i] <- as.numeric(-2 * (logLik(m1) - logLik(m2)))
+}
+
+pp<- (1 + sum(lr.perm > teststat))/(1 + B) # p-value
+sprintf("likelihood ratio test using permutation (p-value): %.3f", pp)
+```
+
+At a significance level of 5\%, only the permutations test does not identify a significant effect of _good spine condition_.
+
+
+## Part 2
+
+The data we use for this question is the sleep data. The study was conducted to show the effect of two soporific drugs (increase in hours of sleep compared to control) on 10 patients. The  variable extra is the response variable , represents the increase in hours of sleep due to the treatment, and the variable group is the grouping factor. The data is given below.
+
+```{r}
+extra<-c(0.7,-1.6,-0.2,-1.2,-0.1,3.4,3.7,0.8,0.0,2.0, 
+         1.9,0.8,1.1,0.1,-0.1,4.4,5.5,1.6,4.6,4.3) 
+group<-c(rep(1,10),rep(2,10)) 
+ID<-c(1:20) 
+sleep <- data.frame(extra, group, ID)
+```
+
+let $\mu_1$ and $\mu_2$ be the means of the first and the second treatment group, respectively. We wish to test the null hypothesis
+
+$$
+H_0:\mu_1 = \mu_2,
+$$
+
+against a two sided alternative.
+
+### Question 2.1
+
+Use the classical two-samples t-test for _two independent samples_.
+
+```{r}
+t.test(extra ~ group, data = sleep, alternative = "two.sided")
+```
+The associate p-value >0.05. So at a significance level of 5/%, the group of  soporific drugs does not influence significantly increase in hours of sleep.
+
+
+### Question 2.2
+
+```{r}
+t.obs <- t.test(sleep$extra~ sleep$group)$statistic
+B <- 1000L
+t.boot <- numeric(B)
+for (i in 1:B) {
+  extra.b <- sample(sleep$extra, replace = T)
+  t.boot[i] <- t.test(extra.b ~ group)$statistic
+}
+
+pt<-(1 + sum(abs(t.boot) > abs(t.obs)))/(1 + B)
+sprintf("Non-parametric t-test (p-value): %.3f", pt)
+
+hist(t.boot, nclass = 50)
+abline(v = t.obs, col = "red")
+```
+
+The non-parametric bootstrap reveals that, p-value >0.05. So at a significance level of 5/%, the group of  soporific drugs does not influence significantly increase in hours of sleep.
+
+### Question 2.3
+To use a parametric bootstrap for testing the null hypothesis H_0 : M1=M2 with the test statistic, 
+-Write a function to calculate tm
+-Use parametric bootstrap to simulate the null hypothesis (we simulate the the null hypothesis by combining data from the 2 groups to indicate no difference in medians); Generate bootstrap samples and calculate tm.
+
+```{r}
+mad <- function(x) {
+  sum(abs(x - median(x)))
+}
+
+tm <- function(x, y) {
+  x.median <- median(x)
+  y.median <- median(y)
+  return ( (x.median - y.median) / (mad(x) + mad(y)) )
+}
+
+tM.obs <- tm(extra[group == 1], extra[group == 2])
+sprintf("tM.obs: %.3f", pt)
+
+```
+
+```{r}
+x <- extra[group == 1]
+y <- extra[group == 2]
+x.n <- length(x)
+y.n <- length(y)
+x.m <- mean(x)
+y.m <- mean(y)
+x.sd <- sd(x)
+y.sd <- sd(y)
+
+B <- 10000L
+tm.boot <- numeric(B)
+set.seed(2025)
+for (i in 1:B) {
+  x.b <- rnorm(x.n, x.m, x.sd)
+  y.b <- rnorm(y.n, y.m, y.sd)
+  tm.boot[i] <- tm(x.b, y.b)
+}
+# p-value
+ptm<- (1 + sum(abs(tm.boot) > abs(tM.obs)))/(1 + B)
+sprintf(" Parametric bootstrap for testing tm: %.3f", ptm)
+```
+
+p-value=0.638 ==> no significant difference between the two group of treatment.
+
+```{r}
+# Plot the bootstrap distribution
+hist(tm.boot, main = "Bootstrap Distribution of t_M",
+     xlab = "t_M", col = "lightblue", breaks = 50)
+abline(v = tM.obs, col = "red", lwd = 2, lty = 2)
+```
+
+### Question 2.4
+
+Compare the distribution of the test statistics in Q2.2 and Q2.3
+
+```{r}
+# Plot both distributions
+par(mfrow = c(1, 2))
+hist(t.boot, freq = FALSE, col = rgb(0, 0, 1, 0.5), breaks = 20,
+     main = "Comparison of Bootstrap Distributions", xlab = "Test Statistic (Q.2.2)")
+abline(v = tM.obs, col = "red", lwd = 2, lty = 2)
+
+hist(tm.boot, freq = FALSE, col = rgb(1, 0, 0, 0.5), breaks = 20, add = FALSE,xlab = "Test Statistic (Q.2.3)", main = "")
+
+abline(v = tM.obs, col = "blue", lwd = 2, lty = 2)
+par(mfrow = c(1, 1))
+
+# Numerical Comparison
+   # --- Compare Mean and Variance of Distributions
+# Bootstrap mean and SD
+tM_bootstrap_mean <- mean(tm.boot)
+tM_bootstrap_sd <- sd(tm.boot)
+
+# Theoretical t-distribution mean and SD
+t_bootstrap_mean <- mean(t.boot)
+t_bootstrap_sd <- sd(t.boot)
+
+# Output comparison
+cat("Bootstrap t_M Mean:", tM_bootstrap_mean, "\n")
+cat("Bootstrap t_M SD:", tM_bootstrap_sd, "\n")
+cat("Theoretical t-distribution Mean:", t_bootstrap_mean, "\n")
+cat("Theoretical t-distribution SD:", t_bootstrap_sd, "\n")
+
+  #-----Compare Tail Behavior
+# tM Bootstrap tail proportion
+tM_bootstrap_tail <- mean(abs(tm.boot) > 2)
+
+# t Bootstrap tail proportion
+t_bootstrap_tail <- mean(abs(t.boot) > 2)
+
+cat("Bootstrap Tail Proportion:", tM_bootstrap_tail, "\n")
+cat("Theoretical Tail Proportion:", t_bootstrap_tail, "\n")
+
+```
+Comparing the two bootstrap distributions helps highlight how robust tM
+is compared to the classical t-statistic, especially in the presence of outliers or non-normality.
+If the distributions are similar, the choice of test may not matter much. However, differences would suggest that tM is less sensitive to the assumptions underlying the classical t-test.
+
+## Part 3 
+
+We consider the following dataset with three variables and 10 observations.
+
+```{r, include=FALSE}
+ID<-c(1:10)
+x1<-c(0.8,-1.23,1.25,-0.28,-0.03,0.61,1.43,-0.54,-0.35,-1.60)
+x2<-c(0.64,-1.69,1.47,-0.14,-0.18,0.43,1.61,-0.31,-0.38,-1.82)
+data.frame(ID,x1,x2)
+```
+
+Note that there two observations per subject: ($X_{1i}$, $X_{2i}$) which represent a measurement of the same variable before and after a treatment. The statistic of primary interest in this question is the ratio between the means, that is
+
+$$
+\hat{\theta} = \frac{\overline{X}_1}{\overline{X}_2}
+$$
+
+### Question 3.1
+
+Estimate the ratio statistic.
+
+```{r}
+(theta.obs <- mean(x1) / mean(x2))
+```
+
+### Question 3.2
+
+Estimate the standard error of the ratio using non parametric bootstrap and Jackknife. For the bootstrap procedure use: B=10,20,50,100,250,500,1000,2500,5000,7500,10000. Which value of B you
+recommend to use?
+
+```{r}
+# Jackknife
+n <- length(ID)
+theta.jk <- numeric(n)
+for (i in 1:n) {
+  x1.jk <- x1[-i]
+  x2.jk <- x2[-i]
+  theta.jk[i] <- mean(x1.jk) / mean(x2.jk)
+}
+```
+
+
+```{r}
+#mean(theta.jk)
+jack_se<-(n - 1) / n * sum(theta.jk - mean(theta.jk))^2
+sprintf("Jackknife non parametric bootstrap: %.30f", jack_se)
+```
+
+
+```{r}
+# non-parametric bootstrap
+Bs <- c(10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 7500, 10000)
+n <- length(ID)
+theta.bs <- vector(mode = "list", length = length(Bs))
+names(theta.bs) <- paste0("B=", Bs)
+set.seed(2025) 
+for (i in seq_along(Bs)) {
+  B <- Bs[i]
+  theta.b <- numeric(B)
+  for (j in 1:B) {
+    index.b <- sample(n, replace = TRUE)
+    theta.b[j] <- mean(x1[index.b]) / mean(x2[index.b])
+  }
+  theta.bs[[i]] <- theta.b
+}
+```
+
+```{r}
+sapply(theta.bs, var)
+```
+
+We recommend to use B=2500
+
+### Question 3.3
+
+Construct a 95% bootstrap confidence interval for the ratio:
+
+```{r}
+quantile(theta.bs[[8]], probs = c(0.025, 0.975))
+```
+
+### Question 3.4
+
+Use a bootstrap procedure to test the hull hypothesis $H_0: \theta = 1$ against a one sided alternative. **Do not** use a two-samples paired t-test for the mean difference to test the null hypothesis
+
+To test the null hypothesis H_0 : $\theta=1$, against a one-sided alternative using a bootstrap procedure, we proceed as follows:
+-Define the Test Statistic:
+-Bootstrap Under the Null Hypothesis:
+Adjust the data under H_0 so that the null hypothesis holds true ($\theta=1$). This can be done by scaling one variable so that the ratio of means equals 1.
+x2_adjusted <- x2*θ
+-Compute Bootstrap Samples (non-parametric): Resample the adjusted data B times and calculate the test statistic for each bootstrap sample.
+-Compare Observed Statistic: Compute the p-value by comparing the observed test statistic to the bootstrap distribution of the statistic under H_0
+
+
+```{r}
+# Observed ratio of means
+theta_obs <- mean(x1) / mean(x2)
+
+# Adjust data under H0: theta = 1
+x2_adjusted <- x2 * (mean(x1) / mean(x2))
+
+# Bootstrap procedure
+set.seed(2025)
+B <- 10000
+bootstrap_ratios <- numeric(B)
+
+for (i in 1:B) {
+  # Resample x1 and x2_adjusted
+  x1_boot <- sample(x1, length(x1), replace = TRUE)
+  x2_boot <- sample(x2_adjusted, length(x2_adjusted), replace = TRUE)
+  
+  # Compute the ratio for bootstrap sample
+  bootstrap_ratios[i] <- mean(x1_boot) / mean(x2_boot)
+}
+
+# One-sided p-value
+p_value <- (1 + sum(bootstrap_ratios >= theta_obs))/(1 + B)
+sprintf("Non-parametric for testing H_0 (p-value) : %.3f", p_value)
+#hist(bootstrap_ratios, nclass = 50)
+#abline(v = theta.obs, col = "red")
+```
+No significant treatment effect at 5\% significance level.
+
+
+## Part 4
+
+Consider the data in Q3, let Let $\mu_1$ and $\mu_2$ the mean of the subjects’ first and the second measurements, respectively. Let the mean deference $\mu_d = \mu_1 - \mu_2 = E(X_{1i}) − (X_{2i})$.
+
+### Question 4.1
+
+Construct a 95% C.I for $\mu_d$ using the classical method.
+
+```{r}
+n <- length(ID)
+mu_d <- mean(x1) - mean(x2)
+se_d <- sqrt(var(x1) / n + var(x2) / n)
+t_critical <- qt(0.975, df = 2 * n - 2)
+c(mu_d - se_d * t_critical, mu_d + se_d * t_critical)
+```
+### Question 4.2
+
+Use non parametric bootstrap to construct a 95% C.I for $\mu_d$. Use the percentile, bootstrap t and BCa methods to construct the C.I.
+-Percentile Method: The CI is directly obtained from the 2.5th and 97.5th percentiles of the bootstrap distribution of $\mu_d$
+-Bootstrap t-Method : 
+Bootstrap mean estimates.
+Bootstrap standard error estimates for each resample.
+A t-statistic for each resample
+Use the quantiles of the bootstrap t-statistics to construct the CI
+- Bias-Corrected and Accelerated (BCa) Method
+
+
+_Non-parametric bootstrap_
+```{r}
+# Non-parametric bootstrap
+B <- 1000L
+n <- length(ID)
+mu.b <- t.b <- numeric(B)
+set.seed(2025) 
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  x1.b <- x1[index.b]
+  x2.b <- x2[index.b]
+  mu.b[i] <- mean(x1.b) - mean(x2.b)
+}
+# 95%CI (percentile)
+quantile(mu.b, prob = c(0.025, 0.975))
+```
+
+_Bootstrap t-Method_
+```{r}
+# Bootstrap t-Method
+B <- 1000L
+n <- length(ID)
+bootstrap_se<- numeric(B)
+set.seed(2025) 
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  x1.b <- x1[index.b]
+  x2.b <- x2[index.b]
+  mu.b[i] <- mean(x1.b) - mean(x2.b)
+   bootstrap_se[i] <- sqrt(var(x1_boot) / n + var(x2_boot) / n)
+}
+# 95%CI (percentile)
+quantile(mu.b, prob = c(0.025, 0.975))
+```
+
+_BCa_
+```{r}
+# TODO: t-intervals, BCa
+quantile(mu.b, probs = c(0.025, 0.975)) #  percentile
+```
+
+### Question 4.3
+
+Test the hypothesis $H_0: \mu_d = 0$ using a non parametric bootstrap procedure.
+
+Null hypothesis: $H_0: \mu_d = 0$ 
+-Compute the observed mean difference: \mu_d
+-Generate bootstrap resamples from the original data, calculate the mean difference for each resample, and build the bootstrap distribution under the null hypothesis.
+-Compute the p-value as the proportion of bootstrap samples where the bootstrap statistic is more extreme than the observed \mu_d under the null hypothesis
+
+
+```{r}
+z <- c(x1, x2)
+m <- length(x1)
+n <- length(x2)
+mn <- m + n
+B <- 1000L
+t.boot <- numeric(B)
+set.seed(2025) 
+for (i in 1:B) {
+  z.b <- sample(z, mn, replace = TRUE)
+  x1.b <- z.b[1:n]
+  x2.b <- z.b[(n+1):mn]
+  t.boot[i] <- mean(x1.b) - mean(x2.b)
+}
+```
+
+```{r}
+hist(t.boot, nclass=50, probability=T)
+t_obs <- t.test(x1, x2)$statistic
+ppp<- (1 + sum(abs(t.boot) > t_obs))/(1 + B)
+sprintf("non parametric bootstrap (p-value: %.5f", ppp)
+```
+
+p-value>0.05, The difference in the means of the two treatments is not significant at 5\% significance level.
+
+
+
+
+
