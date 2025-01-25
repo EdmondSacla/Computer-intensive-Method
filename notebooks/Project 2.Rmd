@@ -1,0 +1,383 @@
+---
+title: "Computer Intensive Methods: Final projects (2024/2025), Project 2"
+output: pdf_document
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+author: "Mikita Bisliuk, Edmond Sacla Aide"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+# Project 2
+
+In this question we use the horseshoe crab dataset. The data is available in R (crabs) as a part of the R package glm2. To get the data, install the package glm2 and use the code below to access the data.
+
+```{r}
+library(glm2)
+data(crabs)
+names(crabs)
+```
+
+```{r}
+plot(crabs$Width, crabs$Satellites)
+```
+
+The dataset contains information about of 173 female horseshoe crab. You can find more details about this dataset in the book of Alen Agresti (An Introduction to Categorical Data Analysis, Section 3.3.2). The first 6 lines are given below.
+
+```{r}
+head(crabs)
+```
+
+Each female horseshoe crab in the study had a male crab attached to her nest. The study investigated factors that affect whether the female crab had any other males, **called satellites**, residing nearby her. The response outcome for each female crab is her number of satellites (*Satellites*). In this question, possible explanatory variables are the female crab’s shell width (*Width*), which is a summary of her size and a binary factor indicating whether the female has good spine condition (yes or no, in R: *GoodSpine*)
+
+## Part 1
+
+### Question 1.1
+
+Let $Y_i$ be the number of satellites,we assume that $Y_i ~ Poisson(\mu_i)$ where $\mu_i$ denotes the expected number of satellites for the i-th female crab. We consider the following linear predictor:
+
+$$
+g(\mu_i) =  \beta_0 + \beta_1 * Width_i + \beta_2 * GoodSpine_i.
+$$
+
+Here, $g()$ is the link function. Formulate an appropriate model for the number satellites. Fit the model and use the likelihood ratio test in order to test the null hypothesis $H_0: \beta_2 = 0$ against a two sided alternative.
+
+```{r}
+crabs_glm_v1 <- glm(Satellites ~ Width,             data = crabs, family = "poisson")
+crabs_glm_v2 <- glm(Satellites ~ Width + GoodSpine, data = crabs, family = "poisson")
+
+teststat <- as.numeric(-2 * (logLik(crabs_glm_v1) - logLik(crabs_glm_v2)))
+pchisq(teststat, df = 1, lower.tail = FALSE)
+
+```
+### Question 1.2
+
+Use parametric and non parametric bootstrap to test the null hypothesis in Q1.1. Compare the distribution of the likelihood ratio statistic obtained for the two bootstrap procedures to the theoretical distribution of the likelihood ratio test, what is you conclusion ?
+
+```{r}
+# non-parametric bootstrap
+B <- 1000L
+size <- nrow(crabs)
+lr.nb <- numeric(B)
+for (i in 1:B) {
+  idx.b <- sample(size, replace = TRUE)
+  crabs.b <- crabs[idx.b, ]
+  m1 <- glm(Satellites ~ Width,             data = crabs.b, family = "poisson")
+  m2 <- glm(Satellites ~ Width + GoodSpine, data = crabs.b, family = "poisson")
+  lr.nb[i] <- as.numeric(-2 * (logLik(m1) - logLik(m2)))
+}
+
+mean(lr.nb)
+(1 + sum(lr.nb > teststat))/(1 + B) #  p-value
+```
+
+```{r}
+# parametric
+attach(crabs)
+lambdas <- predict(crabs_glm_v1, type = "response")
+B <- 1000L
+size <- nrow(crabs)
+lr.pb <- numeric(B)
+for (i in 1:B) {
+  satellites.b <- rpois(size, lambdas)
+  m1 <- glm(satellites.b ~ Width, family = "poisson")
+  m2 <- glm(satellites.b ~ Width + GoodSpine, family = "poisson")
+  lr.pb[i] <- as.numeric(-2 * (logLik(m1) - logLik(m2)))
+}
+
+mean(lr.pb)
+(1 + sum(lr.pb > teststat))/(1 + B) #  p-value
+```
+
+```{r}
+par(mfrow = c(1, 2))
+hist(lr.pb, main = "Parametric")
+hist(lr.nb, main = "Non-parametric")
+```
+
+### Question 1.3
+
+Use permutations test to test the null hypothesis formulated in Q1.1
+
+```{r}
+attach(crabs)
+B <- 1000L
+size <- nrow(crabs)
+lr.perm <- numeric(B)
+for (i in 1:B) {
+  satellites.b <- sample(Satellites, replace = FALSE)
+  m1 <- glm(satellites.b ~ Width, family = "poisson")
+  m2 <- glm(satellites.b ~ Width + GoodSpine, family = "poisson")
+  lr.perm[i] <- as.numeric(-2 * (logLik(m1) - logLik(m2)))
+}
+
+mean(lr.perm)
+(1 + sum(lr.perm > teststat))/(1 + B) # p-value
+```
+
+## Part 2
+
+The data we use for this question is the sleep data. The study was conducted to show the effect of two soporific drugs (increase in hours of sleep compared to control) on 10 patients. The  variable extra is the response variable , represents the increase in hours of sleep due to the treatment, and the variable group is the grouping factor. The data is given below.
+
+```{r}
+extra<-c(0.7,-1.6,-0.2,-1.2,-0.1,3.4,3.7,0.8,0.0,2.0,
+1.9,0.8,1.1,0.1,-0.1,4.4,5.5,1.6,4.6,4.3)
+group<-c(rep(1,10),rep(2,10))
+ID<-c(1:20)
+(sleep <- data.frame(extra,group,ID))
+```
+
+let $\mu_1$ and $\mu_2$ be the means of the first and the second treatment group, respectively. We wish to test the null hypothesis
+
+$$
+H_0:\mu_1 = \mu_2,
+$$
+
+against a two sided alternative.
+
+### Question 2.1
+
+Use the classical two-samples t-test for _two independent samples_.
+
+```{r}
+t.test(extra ~ group, data = sleep, alternative = "two.sided")
+```
+
+### Question 2.2
+
+```{r}
+t.obs <- -1.9278
+B <- 1000L
+t.boot <- numeric(B)
+for (i in 1:B) {
+  extra.b <- sample(sleep$extra, replace = T)
+  t.boot[i] <- t.test(extra.b ~ group)$statistic
+}
+
+(1 + sum(abs(t.boot) > abs(t.obs)))/(1 + B)
+hist(t.boot, nclass = 50)
+abline(v = t.obs, col = "red")
+```
+
+### Question 2.3
+
+```{r}
+mad <- function(x) {
+  sum(abs(x - median(x)))
+}
+
+tm <- function(x, y) {
+  x.median <- median(x)
+  y.median <- median(y)
+  return ( (x.median - y.median) / (mad(x) + mad(y)) )
+}
+
+(tm.obs <- tm(extra[group == 1], extra[group == 2]))
+
+```
+
+```{r}
+x <- extra[group == 1]
+y <- extra[group == 2]
+x.n <- length(x)
+y.n <- length(y)
+x.m <- mean(x)
+y.m <- mean(y)
+x.sd <- sd(x)
+y.sd <- sd(y)
+
+B <- 10000L
+tm.boot <- numeric(B)
+for (i in 1:B) {
+  x.b <- rnorm(x.n, x.m, x.sd)
+  y.b <- rnorm(y.n, y.m, y.sd)
+  tm.boot[i] <- tm(x.b, y.b)
+}
+```
+
+```{r}
+hist(tm.boot, nclass = 50)
+abline(v = tm.obs, col = "red")
+```
+
+### Question 2.4
+
+Compare the distribution of the test statistics in Q2.2 and Q2.3
+
+```{r}
+par(mfrow = c(1,2))
+hist(t.boot, nclass = 50, main = "Based on t-test statistic")
+hist(tm.boot, nclass = 50, main = "Based on robust t-test statistic")
+```
+
+## Part 3 
+
+We consider the following dataset with three variables and 10 observations.
+
+```{r}
+ID<-c(1:10)
+x1<-c(0.8,-1.23,1.25,-0.28,-0.03,0.61,1.43,-0.54,-0.35,-1.60)
+x2<-c(0.64,-1.69,1.47,-0.14,-0.18,0.43,1.61,-0.31,-0.38,-1.82)
+data.frame(ID,x1,x2)
+```
+
+Note that there two observations per subject: ($X_{1i}$, $X_{2i}$) which represent a measurement of the same variable before and after a treatment. The statistic of primary interest in this question is the ratio between the means, that is
+
+$$
+\hat{\theta} = \frac{\overline{X}_1}{\overline{X}_2}
+$$
+
+### Question 3.1
+
+Estimate the ratio statistic.
+
+```{r}
+(theta.obs <- mean(x1) / mean(x2))
+```
+
+### Question 3.2
+
+Estimate the standard error of the ratio using non parametric bootstrap and Jackknife. For the bootstrap procedure use: B=10,20,50,100,250,500,1000,2500,5000,7500,10000. Which value of B you
+recommend to use?
+
+```{r}
+# Jackknife
+n <- length(ID)
+theta.jk <- numeric(n)
+for (i in 1:n) {
+  x1.jk <- x1[-i]
+  x2.jk <- x2[-i]
+  theta.jk[i] <- mean(x1.jk) / mean(x2.jk)
+}
+```
+
+
+```{r}
+mean(theta.jk)
+(n - 1) / n * sum(theta.jk - mean(theta.jk))^2
+```
+
+
+```{r}
+# non-parametric bootstrap
+Bs <- c(10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 7500, 10000)
+n <- length(ID)
+theta.bs <- vector(mode = "list", length = length(Bs))
+names(theta.bs) <- paste0("B=", Bs)
+for (i in seq_along(Bs)) {
+  B <- Bs[i]
+  theta.b <- numeric(B)
+  for (j in 1:B) {
+    index.b <- sample(n, replace = TRUE)
+    theta.b[j] <- mean(x1[index.b]) / mean(x2[index.b])
+  }
+  theta.bs[[i]] <- theta.b
+}
+```
+
+```{r}
+sapply(theta.bs, var)
+```
+
+### Question 3.3
+
+Construct a 95% bootstrap confidence interval for the ratio
+
+```{r}
+quantile(theta.bs[[1]], probs = c(0.025, 0.975))
+```
+
+### Question 3.4
+
+Use a bootstrap procedure to test the hull hypothesis $H_0: \theta = 1$ against a one sided alternative. **Do not** use a two-samples paired t-test for the mean difference to test the null hypothesis
+
+```{r}
+x1.mean <- mean(x1)
+x2.mean <- mean(x2)
+x1.centered <- scale(x1, scale = FALSE) + (x1.mean + x2.mean) / 2
+x2.centered <- scale(x2, scale = FALSE) + (x1.mean + x2.mean) / 2
+
+B <- 1000L
+thetaH0.b <- numeric(B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  thetaH0.b[i] <- mean(x1.centered[index.b]) / mean(x2.centered[index.b])
+}
+
+mean(thetaH0.b)
+(1 + sum(thetaH0.b < theta.obs)) / (1 + B)
+
+```
+
+```{r}
+hist(thetaH0.b, nclass = 50)
+abline(v = theta.obs, col = "red")
+```
+
+## Part 4
+
+Consider the data in Q3, let Let $\mu_1$ and $\mu_2$ the mean of the subjects’ first and the second measurements, respectively. Let the mean deference $\mu_d = \mu_1 - \mu_2 = E(X_{1i}) − (X_{2i})$.
+
+### Question 4.1
+
+Construct a 95% C.I for $\mu_d$ using the classical method.
+
+```{r}
+n <- length(ID)
+mu_d <- mean(x1) - mean(x2)
+se_d <- sqrt(var(x1) / n + var(x2) / n)
+t_critical <- qt(0.975, df = 2 * n - 2)
+c(mu_d - se_d * t_critical, mu_d + se_d * t_critical)
+```
+
+```{r}
+t.test(x1, x2)
+```
+
+### Question 4.2
+
+Use non parametric bootstrap to construct a 95% C.I for $\mu_d$. Use the percentile, bootstrap t and BCa methods to construct the C.I.
+
+```{r}
+B <- 1000L
+n <- length(ID)
+mu.b <- t.b <- numeric(B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  x1.b <- x1[index.b]
+  x2.b <- x2[index.b]
+  mu.b[i] <- mean(x1.b) - mean(x2.b)
+  t.b[i] <- mu.b[i] / sqrt(var(x1.b) / n + var(x2.b) / n)
+}
+```
+
+```{r}
+# TODO: t-intervals, BCa
+quantile(mu.b, probs = c(0.025, 0.975)) #  percentile
+```
+
+### Question 4.3
+
+Test the hypothesis $H_0: \mu_d = 0$ using a non parametric bootstrap procedure.
+
+```{r}
+z <- c(x1, x2)
+m <- length(x1)
+n <- length(x2)
+mn <- m + n
+B <- 1000L
+t.boot <- numeric(B)
+for (i in 1:B) {
+  z.b <- sample(z, mn, replace = TRUE)
+  x1.b <- z.b[1:n]
+  x2.b <- z.b[(n+1):mn]
+  t.boot[i] <- mean(x1.b) - mean(x2.b)
+}
+```
+
+```{r}
+hist(t.boot, nclass=50, probability=T)
+```
+
+

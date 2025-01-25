@@ -1,0 +1,368 @@
+---
+title: "Computer Intensive Methods: Final projects (2024/2025), Project 3"
+output: pdf_document
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+author: "Mikita Bisliuk, Edmond Sacla Aide"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+# Project 3
+
+## Part 1
+
+The data we use in this question is the Chicks dataset. The data contains information over an experiment was conducted to measure and compare the effectiveness of various feed supplements on the growth rate of chickens. use the following code to access the data:
+
+```{r}
+head(chickwts)
+```
+
+The question of primary interest is if there is a difference between the chicks weights across the diet groups. Let $Y_{ij}$ be the weight of a chick $i$ in diet group $j$.
+
+### Question 1.1
+
+Formulate a one-way ANOVA model for the problem, formulate the null hypothesis and the alternative. Test the null hypothesis using the classical F test. Formulate the test statistic and test the null hypothesis using significance level of 5%
+
+```{r}
+chickwts.lm <- lm(weight ~ feed, data = chickwts)
+anova(chickwts.aov)
+```
+
+### Question 1.2
+
+Use semi-parametric bootstrap in order to test the null hypothesis of no diet effect.
+
+```{r}
+chickwts.lmh0 <- lm(weight ~ 1, data = chickwts)
+ei.0 <- chickwts.lmh0$residuals
+B <- 1000L
+fval.b <- numeric(B)
+for (i in 1:B) {
+  ei.b <- sample(ei.0, replace = TRUE)
+  y.b <- coef(chickwts.lmh0)[1] + ei.b
+  x.b <- chickwts$feed
+  fit.boot <- lm(y.b ~ x.b)
+  fval.b[i] <- anova(fit.boot)$`F value`[1]
+}
+```
+
+```{r}
+hist(fval.b, nclass = 50, xlim = c(0, 20))
+abline(v = 15.365, col = "red")
+```
+
+### Question 1.3
+
+Use permutations test to test the null hypothesis of no diet effect.
+
+```{r}
+B <- 1000L
+fval.boot <- numeric(B)
+for (i in 1:B) {
+  feed.b <- sample(chickwts$feed, replace = FALSE)
+  fit.b <- lm(chickwts$weight ~ feed.b)
+  fval.boot[i] <- anova(fit.b)$`F value`[1]
+}
+```
+
+```{r}
+hist(fval.boot, nclass = 50)
+abline(v = 15.365, col = "red")
+```
+
+### Question 1.4
+
+Let $\theta = \mu_{sunflower} - \mu_{soybean}$ be the mean difference between the Sunflower and Soybean diet groups. Estimate $\theta$ and construct a 90% C.I. for $\theta$ using a parametric bootstrap.
+
+```{r}
+x <- relevel(chickwts$feed, "soybean")
+y <- chickwts$weight
+param.lm <- lm(y ~ x)
+
+B <- 1000L
+coef.b <- matrix(nrow = B, ncol = nlevels(x))
+n <- length(x)
+for (i in 1:B) {
+  y.b <- rnorm(n, mean = predict(param.lm), sd = sd(param.lm$residuals))
+  fit.boot <- lm(y.b ~ x)
+  coef.b[i, ] <- coef(fit.boot)
+}
+
+```
+
+```{r}
+theta.b <- coef.b[, 6]
+hist(theta.b, nclass = 50)
+abline(v = quantile(theta.b, probs = c(0.95, 0.05)), col = "red")
+abline(v = coef(param.lm)[6], col = "blue")
+```
+
+## Part 2
+
+### Question 2.1
+
+In this question we focused on the Computers dataset that can be accessed via the R package Ecdat. Make sure you install the package Ecdat in order to access the data. This data shows the prices of Personal Computers from 1993 until 1995. It contains with 6259 observations on 10 variables. Visit https://rdrr.io/cran/Ecdat/man/Computers.html to read more about the data set. Use the code below to acsess the data.
+
+```{r}
+library(Ecdat)
+data("Computers")
+names(Computers)
+```
+
+```{r}
+head(Computers)
+```
+
+let us focus on the variables “price in US dollars of 486 PCs” (the variable price in the dataset) and size of hard drive in MB (the variable hd in the dataset). Let $Y_i$ be the price and $X_i$ be the size of hard drive in MB.
+
+```{r}
+plot(Computers$hd, Computers$price)
+```
+
+We consider the following regression model:
+
+$$
+Y_i = \beta_0 + \beta_1 X_i + \epsilon_i
+$$
+### Question 2.1
+
+Estimate the model using the classical OLS approach.
+
+```{r}
+Computers.lm <- lm(price ~ hd, data = Computers)
+mean(abs(Computers.lm$residuals))
+mean(Computers.lm$residuals^2)
+summary(Computers.lm)
+
+```
+
+```{r}
+par(mfrow = c(1, 2))
+plot(Computers$hd, Computers.lm$residuals)
+abline(1, 0)
+
+hist(Computers.lm$residuals, nclass = 50)
+```
+
+### Question 2.3
+
+```{r}
+k <- 10
+folds <- sample(rep(1:k, length.out = nrow(Computers)))
+mae <- mse <- numeric(k)
+for (i in 1:k) {
+  train_index <- which(folds != i)
+  test_index <- which(folds == i)
+  
+  train_data <- Computers[train_index, ]
+  test_data <- Computers[test_index, ]
+  
+  model <- lm(price ~ hd, data = train_data)
+  
+  predictions <- predict(model, newdata = test_data)
+  
+  mae[i] <- mean(abs(test_data$price - predictions))
+  mse[i] <- mean((test_data$price - predictions)^2)
+}
+
+```
+
+```{r}
+mean(mae)
+mean(mse)
+```
+
+### Question 2.4
+
+Use leave one out cross validation to investigate the change in the slope estimate $\hat{\beta_1}$ as the data change and visualize this change in a graphical display
+
+```{r}
+n <- nrow(Computers)
+fit.cv <- beta.cv <- numeric(n)
+for (i in 1:n) {
+  x.cv <- Computers$hd[-i]
+  y.cv <- Computers$price[-i]
+  model <- lm(y.cv ~ x.cv)
+  beta.cv[i] <- coef(model)[2]
+  fit.cv[i] <- coef(model)[1] + coef(model)[2] * Computers$hd[i]
+}
+```
+
+```{r}
+res.cv <- Computers$price - fit.cv
+mean(abs(res.cv))
+mean(res.cv^2)
+```
+```{r}
+plot(Computers$hd, beta.cv)
+abline(coef(Computers.lm)[2],0)
+```
+
+Use a bootstrap procedure to construct a 95% C.I. for the predicted values (i.e., the regression line) of the model
+
+```{r}
+n <- nrow(Computers)
+B <- 1000L
+coef.b <- matrix(ncol = 2, nrow = B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  fit.boot <- lm(price ~ hd, data = Computers[index.b, ])
+  coef.b[i, ] <- coef(fit.boot)
+}
+```
+
+```{r}
+quantile(coef.b[, 2], probs = c(0.025, 0.975))
+
+```
+
+
+```{r}
+plot(price ~ hd, data = Computers)
+abline(Computers.lm)
+
+coef.ci <- coef.b[coef.b[, 2] >= 0.92 & coef.b[, 2] <= 1.02, ]
+for(i in 1:nrow(coef.ci)) {
+  abline(a = coef.ci[i,1], b = coef.ci[i, 2], col = "green")
+}
+```
+
+## Part 3
+
+In this question we use the same model formulated in Q2.
+
+### Question 3.1
+
+Use non parametric bootstrap to constract a 95% C.I for $SE(\hat{\beta_0})$ and $SE(\hat{\beta_1})$
+
+```{r}
+n <- nrow(Computers)
+B <- 1000L
+coef.b <- matrix(ncol = 2, nrow = B)
+for (i in 1:B) {
+  index.b <- sample(n, replace = TRUE)
+  fit.boot <- lm(price ~ hd, data = Computers[index.b, ])
+  coef.b[i, ] <- coef(fit.boot)
+}
+
+quantile(coef.b[, 1], probs = c(0.025, 0.975))
+quantile(coef.b[, 2], probs = c(0.025, 0.975))
+```
+
+```{r}
+par(mfrow = c(1,2))
+hist(coef.b[, 1], nclass = 50)
+abline(v = quantile(coef.b[, 1], probs = c(0.025, 0.975)), col = "red")
+
+hist(coef.b[, 2], nclass = 50)
+abline(v = quantile(coef.b[, 2], probs = c(0.025, 0.975)), col = "red")
+```
+
+### Question 3.2
+
+Explain and illustrate how can you use a bootstrap procedure to investigate the influence of the observations for which the hard drive size is larger than 2000 MB. In your illustration, use the estimates for the $SE(\hat{\beta_0})$ and $SE(\hat{\beta_1})$ that were calculated in Q3.1
+
+TODO
+
+## Part 4
+
+Consider a sample of 20 observations from a population with mean $\mu$:
+
+```{r}
+x<-c(0.68446806,-0.02596037,-0.90015774,0.72892605,-0.45612255, 0.19311847,
+-0.13297109, -0.99845382, 0.37278006, -0.20371894, -0.15468803, 0.19298230
+, -0.42755534, -0.04704525, 0.15273726, 0.03655799, 0.01315016, -0.59121428,
+4.50955771, 2.87272653)
+length(x)
+```
+
+### Question 4.1
+
+Estimate 𝜇 using the mean and the median.
+
+```{r}
+mean(x)
+median(x)
+```
+
+### Question 4.2
+
+Approximate the distribution of the sample mean and the median using non parametric bootstrap with B=1000.
+
+```{r}
+B <- 1000L
+mean.b <- median.b <- numeric(B)
+for (i in 1:B) {
+  x.b <- sample(x, replace = TRUE)
+  mean.b[i] <- mean(x.b)
+  median.b[i] <- median(x.b)
+}
+```
+
+```{r}
+par(mfrow = c(1,2))
+hist(mean.b, nclass = 50)
+hist(median.b, nclass = 50)
+```
+
+### Question 4.3
+
+Estimate the standard error of the sample mean and the median and calculate 95% C.I for the sample mean and median using a semi parametric bootstrap.
+
+```{r}
+lm0 <- lm(x ~ 1)
+e0 <- lm0$residuals
+B <- 1000L
+mean.semib <- median.semib <- numeric(B)
+for (i in 1:B) {
+  e.b <- sample(e0, replace = TRUE)
+  x.b <- coef(lm0)[1] + e.b
+  mean.semib[i] <- mean(x.b)
+  median.semib[i] <- median(x.b)
+}
+```
+
+```{r}
+sd(mean.semib)
+sd(median.semib)
+
+quantile(mean.semib, probs = c(0.025, 0.975))
+quantile(median.semib, probs = c(0.025, 0.975))
+```
+### Question 4.4
+
+Estimate the MSE for the mean and the median using jackknife, which parameter estimate you prefer to use?
+
+```{r}
+n <- length(x)
+mean.jk <- median.jk <- numeric(n)
+for (i in 1:n) {
+  x.jk <- x[-i]
+  mean.jk <- mean(x.jk)
+  median.jk <- median(x.jk)
+}
+```
+
+```{r}
+(n - 1) * mean((mean.jk - mean(x))^2)
+(n - 1) * mean((median.jk - median(x))^2)
+```
+
+### Question 4.5
+
+Let M be the median and let $\pi_{M < 0} = P(M < 0)$. Estimate $\pi_{M < 0}$ , estimate the distribution of $\hat{\pi}_{M < 0}$ and construct a 95% C.I. for $\pi_{M < 0}$.
+
+```{r}
+B <- 10000L
+prob.b <- numeric(B)
+for (i in 1:B) {
+  x.b <- sample(x, replace = TRUE)
+  prob.b[i] <- ifelse(median(x.b) < 0, 1, 0)
+}
+
+mean(prob.b)
+sd(prob.b)
+```
+
