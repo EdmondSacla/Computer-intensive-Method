@@ -13,7 +13,7 @@ output:
 header-includes:
  - \usepackage{float}
  - \usepackage{titling}
- # - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
+ - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
  - \posttitle{\end{center}}
 ---
 \pagebreak
@@ -718,8 +718,7 @@ for (i in 1:B) {
 # Calculate the 95% confidence interval from the bootstrap distribution
 hist(boot_diff,nclass=100)
 CI<- quantile(boot_diff,probs=c(0.025,0.975))
-
-sprintf("The difference in the proportion is  : %.3f", CI)
+abline(v = CI, col = "blue")
 ```
 
 The CI 95\% CI: [-0.018, 0.008]. 

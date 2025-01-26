@@ -1,14 +1,10 @@
 ---
 title: |
   **2nd-Year Master of Statistics and Data Science**
-  **Computer Intensive Methods: Final projects (2024/2025**
-  **Project 3**
-author: |
- author: "Mikita Bisliuk (2364811), Edmond Sacla Aide (2159278)"
-  
-date: |
-  2025-01-26
-  
+  **Computer Intensive Methods: Final projects (2024/2025)**
+subtitle: "**Project 3**"
+author: "Mikita Bisliuk (2364811), Edmond Sacla Aide (2159278)"
+date: "`r format(Sys.time(), '%d %B, %Y')`" 
 output:
   pdf_document:
     latex_engine: xelatex
@@ -27,11 +23,11 @@ header-includes:
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # loading packages
-library(tidyverse)
-library(ggplot2)
+# library(tidyverse)
+# library(ggplot2)
 library("DAAG")
 library("robust")
-library(parallel)
+# library(parallel)
 ```
 
 

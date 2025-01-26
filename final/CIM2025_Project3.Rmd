@@ -1,0 +1,798 @@
+---
+title: |
+  **2nd-Year Master of Statistics and Data Science**
+  **Computer Intensive Methods: Final projects (2024/2025)**
+subtitle: "**Project 3**"
+author: "Mikita Bisliuk (2364811), Edmond Sacla Aide (2159278)"
+date: "`r format(Sys.time(), '%d %B, %Y')`" 
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+header-includes:
+ - \usepackage{float}
+ - \usepackage{titling}
+ - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
+ - \posttitle{\end{center}}
+---
+\pagebreak
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# loading packages
+# library(tidyverse)
+# library(ggplot2)
+library("DAAG")
+library("robust")
+# library(parallel)
+```
+
+
+# Project 3
+
+## Part 1
+
+The data we use in this question is the Chicks dataset. The data contains information over an experiment was conducted to measure and compare the effectiveness of various feed supplements on the growth rate of chickens.
+
+The question of primary interest is if there is a difference between the chicks weights across the diet groups. Let $Y_{ij}$ be the weight of a chick $i$ in diet group $j$.
+
+### Question 1.1
+
+<!-- Formulate a one-way ANOVA model for the problem, formulate the null hypothesis and the alternative. Test the null hypothesis using the classical F test. Formulate the test statistic and test the null hypothesis using significance level of 5% -->
+
+### Formulating a one-way ANOVA model
+
+#### Model:
+Let \( Y_{ij} \) represent the weight of chick \( i \) in diet group \( j \). The one-way ANOVA model can be written as:
+
+\[
+Y_{ij} = \mu_j + \epsilon_{ij},
+\]
+
+where:
+- \( \mu_j \) is the mean weight for diet group \( j \),
+- \( \epsilon_{ij} \) is the random error term with \( \epsilon_{ij} \sim N(0, \sigma^2) \).
+
+#### Hypotheses:
+- **Null Hypothesis (\( H_0 \))**: All diet groups have the same mean weight.
+  \[
+  H_0: \mu_1 = \mu_2 = \ldots = \mu_k
+  \]
+- **Alternative Hypothesis (\( H_A \))**: At least one diet group has a different mean weight.
+  \[
+  H_A: \text{Not all } \mu_j \text{ are equal.}
+  \]
+
+#### Test Statistic:
+The test statistic for one-way ANOVA is given by:
+\[
+F = \frac{\text{Between-group variability (MSB)}}{\text{Within-group variability (MSW)}},
+\]
+where:
+- \( MSB = \frac{SSB}{k - 1} \), the mean sum of squares between groups,
+- \( MSW = \frac{SSW}{N - k} \), the mean sum of squares within groups,
+- \( k \) is the number of groups, and \( N \) is the total number of observations.
+
+
+```{r}
+chickwts.lm <- lm(weight ~ feed, data = chickwts)
+anova(chickwts.lm)
+F_obs <- anova(chickwts.lm)$`F value`[1]
+# The critical F-value at a significance level of α=0.05, with 5 and 65 degrees of freedom, is approximately 2.36
+alpha=0.05
+F_critical=qf(1 - alpha, 5, 65)
+sprintf("Observed F is: %.2f", F_obs)
+sprintf("Critical F is: %.2f", F_critical)
+
+# Extract the p-value from the anova
+p_value <- anova(chickwts.lm)$`Pr(>F)`[1]  # Extract p-value for the first row (group effect)
+#sprintf("P-value from anova: %.10f", F_critical)
+```
+- \( F_{\text{Observed}} > F_{\text{critical}} \), reject \( H_0 \).
+- \ (Also p_{\text{value}}= 5.936e-10 < 0.05\), reject \( H_0 \).
+
+Conclusion: there is a significant difference in mean weights between diet groups. Otherwise, no significant difference is detected.
+
+
+
+### Question 1.2 : Testing the Null Hypothesis of No Diet Effect Using Semi-Parametric Bootstrap
+
+<!-- Use semi-parametric bootstrap in order to test the null hypothesis of no diet effect. -->
+
+To test the null hypothesis \( H_0: \mu_1 = \mu_2 = \ldots = \mu_k \) (no diet effect) using a semi-parametric bootstrap, we follow these steps:
+
+1. **Fit the Null Model**:
+   - Under the null hypothesis, the response variable \( Y \) is modeled without considering group differences. This gives the residuals.
+
+2. **Resample Residuals**:
+   - Randomly sample (with replacement) from the residuals of the null model to generate bootstrap datasets.
+
+3. **Generate Bootstrap Datasets**:
+   - Add the resampled residuals back to the fitted values under \( H_0 \) to create new bootstrap datasets.
+
+4. **Compute Test Statistic for Each Bootstrap Sample**:
+   - For each bootstrap dataset, compute the \( F \)-statistic from the ANOVA test.
+
+5. **Bootstrap Distribution**:
+   - Collect the \( F \)-statistics from all bootstrap samples to approximate their null distribution.
+
+6. **p-value Calculation**:
+   - Calculate the proportion of bootstrap \( F \)-statistics that are greater than or equal to the observed \( F \)-statistic from the original data.
+
+#### Hypotheses:
+- **Null Hypothesis (\( H_0 \))**: There is no diet effect (all groups have the same mean weight).
+- **Alternative Hypothesis (\( H_A \))**: There is a diet effect (at least one group's mean weight is different).
+
+
+```{r, echo = FALSE}
+chickwts.lmh0 <- lm(weight ~ 1, data = chickwts)
+ei.0 <- chickwts.lmh0$residuals
+B <- 1000L
+fval.b <- numeric(B)
+set.seed(2025) 
+for (i in 1:B) {
+  ei.b <- sample(ei.0, replace = TRUE)
+  y.b <- coef(chickwts.lmh0)[1] + ei.b
+  x.b <- chickwts$feed
+  fit.boot <- lm(y.b ~ x.b)
+  fval.b[i] <- anova(fit.boot)$`F value`[1]
+}
+
+#hist(fval.b, xlim = c(0, 20), 
+  #   main = "Distribution of bootstrap F statistics under the null",
+  #   xlab = "F statistics")
+#abline(v = F_obs , col = "red")
+
+  # P-value
+p_value<- (1 + sum(fval.b > F_obs))/(B + 1)
+sprintf("Bootstrap p-value: %.3f", p_value)
+```
+
+The result indicates evidence against the null hypothesis, suggesting a diet effect on chick weights. Otherwise, fail to reject \( H_0 \).
+
+
+### Question 1.3 : Testing the Null Hypothesis of No Diet Effect Using Permutation Test
+
+<!-- Use permutations test to test the null hypothesis of no diet effect. -->
+
+To test the null hypothesis \( H_0: \mu_1 = \mu_2 = \ldots = \mu_k \) (no diet effect) using a permutation test, we follow these steps:
+
+1. **Compute Observed \( F \)-Statistic**:
+   - Perform a one-way ANOVA on the original dataset to compute the observed \( F \)-statistic.
+
+2. **Permute the Data**:
+   - Shuffle the diet group labels randomly across all observations while keeping the response variable \( Y \) unchanged. This breaks any relationship between the response and the groups under the null hypothesis.
+
+3. **Generate Permuted Datasets**:
+   - For each permutation, compute the \( F \)-statistic using the permuted dataset.
+
+4. **Build Permutation Distribution**:
+   - Collect the \( F \)-statistics from all permuted datasets to approximate their null distribution under \( H_0 \).
+
+5. **Calculate p-value**:
+   - The p-value is the proportion of permuted \( F \)-statistics that are greater than or equal to the observed \( F \)-statistic.
+
+#### Hypotheses:
+- **Null Hypothesis (\( H_0 \))**: There is no diet effect (all groups have the same mean weight).
+- **Alternative Hypothesis (\( H_A \))**: There is a diet effect (at least one group's mean weight is different).
+
+
+```{r, echo = FALSE}
+B <- 1000L
+fval.boot <- numeric(B)
+set.seed(2025) 
+for (i in 1:B) {
+  feed.b <- sample(chickwts$feed, replace = FALSE)
+  fit.b <- lm(chickwts$weight ~ feed.b)
+  fval.boot[i] <- anova(fit.b)$`F value`[1]
+}
+
+#hist(fval.boot, xlim = c(0, 20), 
+ #    main = "Distribution of permutation F statistics under the null",
+ #    xlab = "F statistics")
+#abline(v = F_obs, col = "red")
+
+# P-value
+p_value_permutation <-(1 + sum(fval.boot > F_obs))/(B + 1)
+sprintf("Bootstrap p-value: %.3f", p_value_permutation)
+```
+
+- \( \text{p-value} < \alpha = 0.05 \), reject \( H_0 \), suggesting evidence of a diet effect.
+The permutation test provides a non-parametric approach to testing group differences without relying on the assumptions of normality or equal variances.
+
+
+### Question 1.4: Estimation of \( \theta = \mu_{\text{Sunflower}} - \mu_{\text{Soybean}} \) and Construction of a 90% C.I. Using Parametric Bootstrap
+
+<!-- Let $\theta = \mu_{sunflower} - \mu_{soybean}$ be the mean difference between the Sunflower and Soybean diet groups. Estimate $\theta$ and construct a 90% C.I. for $\theta$ using a parametric bootstrap. -->
+
+To estimate \( \theta \) and construct a 90% confidence interval using a parametric bootstrap, we follow these steps:
+
+1. **Define \( \theta \):**
+   - \( \theta = \mu_{\text{Sunflower}} - \mu_{\text{Soybean}} \), the mean difference between the Sunflower and Soybean diet groups.
+
+2. **Fit the Model:**
+   - Fit a one-way ANOVA model to the data to estimate the group means (\( \mu_{\text{Sunflower}} \) and \( \mu_{\text{Soybean}} \)).
+
+3. **Compute Observed \( \theta \):**
+   - Calculate the observed value of \( \theta \) as the difference between the means of the Sunflower and Soybean groups.
+
+4. **Parametric Bootstrap:**
+   - Assume the residuals follow a normal distribution.
+   - For each bootstrap iteration:
+     - Resample the residuals and add them to the fitted values for the Sunflower and Soybean groups to generate new datasets.
+     - Compute \( \theta \) for each bootstrap dataset.
+
+5. **Theata Construct the Confidence Interval:**
+   - calculate the bootstraap mean
+   - Extract the 5th and 95th percentiles of the bootstrap distribution to form the 90% confidence interval.
+
+
+
+```{r}
+# Subset data for Sunflower and Soybean
+sunflower <- chickwts$weight[chickwts$feed == "sunflower"]
+soybean <- chickwts$weight[chickwts$feed == "soybean"]
+ 
+# Estimate the observed difference in means
+theta_hat <- mean(sunflower) - mean(soybean)
+
+set.seed(2025) 
+B <- 1000
+bootstrap_thetas <- c()
+
+ # Parameters for Sunflower and Soybean groups
+n_sunflower <- length(sunflower)
+n_soybean <- length(soybean)
+mean_sunflower <- mean(sunflower)
+mean_soybean <- mean(soybean)
+sd_sunflower <- sd(sunflower)
+sd_soybean <- sd(soybean)
+
+ # Generate bootstrap samples
+for (i in 1:B) {
+  boot_sunflower <- rnorm(n_sunflower, mean = mean_sunflower, sd = sd_sunflower)
+  boot_soybean <- rnorm(n_soybean, mean = mean_soybean, sd = sd_soybean)
+  bootstrap_thetas[i] <- mean(boot_sunflower) - mean(boot_soybean)
+}
+theta<- mean(bootstrap_thetas)
+sprintf("mean difference between the Sunflower and Soybean diet groups is: %.3f", theta)
+
+CI_lower <- quantile(bootstrap_thetas, 0.05)
+CI_upper <- quantile(bootstrap_thetas, 0.95)
+CI <- c(CI_lower, CI_upper)
+sprintf("CI of mean difference between the Sunflower and Soybean diet groups is: %.3f", CI)
+list(theta_observed = theta, confidence_interval = CI)
+```
+
+
+## Part 2
+
+### Question 2.1
+
+In this question we focused on the Computers dataset that can be accessed via the R package Ecdat. Make sure you install the package Ecdat in order to access the data. This data shows the prices of Personal Computers from 1993 until 1995. It contains with 6259 observations on 10 variables. 
+<!-- Visit https://rdrr.io/cran/Ecdat/man/Computers.html to read more about the data set. Use the code below to acsess the data. -->
+
+```{r}
+library(Ecdat)
+data("Computers")
+#names(Computers)
+```
+
+let us focus on the variables “price in US dollars of 486 PCs” (the variable price in the dataset) and size of hard drive in MB (the variable hd in the dataset). Let $Y_i$ be the price and $X_i$ be the size of hard drive in MB.
+
+```{r, include=FALSE}
+plot(Computers$hd, Computers$price)
+```
+
+We consider the following regression model:
+
+$$
+Y_i = \beta_0 + \beta_1 X_i + \epsilon_i
+$$
+
+<!-- Estimate the model using the classical OLS approach. -->
+
+We aim to estimate the following regression model using Ordinary Least Squares (OLS):
+\[
+y_i = \beta_0 + \beta_1 x_i + \epsilon_i
+\]
+where:
+- \( y_i \): Response variable (e.g., price).
+- \( x_i \): Predictor variable (e.g., hard drive size).
+- \( \beta_0 \): Intercept.
+- \( \beta_1 \): Slope.
+- \( \epsilon_i \): Error term.
+
+
+```{r}
+Computers.lm <- lm(price ~ hd, data = Computers)
+#mean(abs(Computers.lm$residuals))
+#mean(Computers.lm$residuals^2)
+summary(Computers.lm)
+
+```
+
+
+### Question 2.2: Prediction of Price and Estimation of Prediction Error
+
+1. Fit the regression model using the classical OLS approach.
+2. Use the `predict()` function to obtain predicted values.
+3. Calculate the prediction error as the difference between actual and predicted values.
+4. Compute metrics such as Mean Squared Error (MSE) or Root Mean Squared Error (RMSE) to quantify the prediction error.
+
+```{r, echo=FALSE}
+price_pred <- predict(Computers.lm )
+hist(price_pred, nclass=50,
+     main = "The distribution of prediction",
+     xlab = "Predictions")
+# Error
+pred_error <- Computers$price - price_pred
+#hist(pred_error, nclass=50,
+  #   main = "The distribution of prediction errors",
+ #    xlab = "Errors")
+
+# Mean squared error
+mse1 <- sqrt(mean(pred_error^2))
+sprintf("The squared mean squared error is: %.3f", mse1)
+```
+
+### Question 2.3: 10-Fold Cross-Validation for Price Prediction and Error Estimation
+
+1. Divide the dataset into 10 approximately equal folds.
+2. For each fold:
+   - Use 9 folds as the training set to fit the model.
+   - Use the remaining fold as the test set to predict prices and calculate prediction errors.
+3. Calculate the  Mean Squared Error (RMSE) for each fold.
+4. Average the MSEs across all folds to obtain the cross-validated error.
+
+```{r}
+k <- 10
+folds <- sample(rep(1:k, length.out = nrow(Computers)))
+mae <- mse <- numeric(k)
+set.seed(2025) 
+for (i in 1:k) {
+  train_index <- which(folds != i)
+  test_index <- which(folds == i)
+  
+  train_data <- Computers[train_index, ]
+  test_data <- Computers[test_index, ]
+  
+  model <- lm(price ~ hd, data = train_data)
+  
+  predictions <- predict(model, newdata = test_data)
+  
+ # mae[i] <- mean(abs(test_data$price - predictions))
+  mse[i] <- mean((test_data$price - predictions)^2)
+}
+
+# Calculate the average MSE across all folds
+cv_rmse <- sqrt( mean(mse))
+
+# Print the cross-validated error
+cat("10-Fold Cross-Validated RMSE:", cv_rmse, "\n")
+
+# Compare with classical OLS results (from Q2.2)
+cat("Classical OLS RMSE:", mse1, "\n")
+```
+
+### Question 2.4: Leave-One-Out Cross-Validation (LOOCV) to Investigate Changes in \( \hat{\beta}_1 \)
+
+Use LOOCV to analyze the variation in the slope estimate (\( \hat{\beta}_1 \)) when each observation is excluded. Visualize the changes in \( \hat{\beta}_1 \) to assess its sensitivity to individual observations.
+
+1. Exclude each observation one at a time.
+2. Fit the regression model to the remaining \( n-1 \) observations.
+3. Record the slope estimate (\( \hat{\beta}_1 \)) for each iteration.
+4. Visualize the changes in \( \hat{\beta}_1 \) across all iterations.
+
+```{r}
+# Initialize vector to store slope estimates
+n <- nrow(Computers)
+beta1_estimates <- numeric(n)
+set.seed(2025) 
+# Loop through each observation
+for (i in 1:n) {
+  # Leave one observation out
+  train_data <- Computers[-i, ]
+  
+  # Fit the linear regression model
+  model <- lm(price ~ hd, data = train_data)
+  
+  # Store the slope estimate
+  beta1_estimates[i] <- coef(model)["hd"]
+}
+
+# Visualize the change in slope estimates
+plot(
+  1:n, beta1_estimates, type = "l", col = "blue", lwd = 2,
+  xlab = "Excluded Observation Index",
+  ylab = "Slope Estimate (β̂1)",
+  main = "Change in Slope Estimate (β̂1) with LOOCV")
+
+# Add a horizontal line for the full model slope estimate
+full_model <- lm(price ~ hd, data = Computers)
+abline(h = coef(full_model)["hd"], col = "red", lty = 2, lwd = 2)
+
+legend(
+  "topright", legend = c("LOOCV Slope Estimates", "Full Model Slope Estimate"),
+  col = c("blue", "red"), lty = c(1, 2), lwd = c(2, 2)
+)
+```
+
+
+
+### Question 2.5:Non-Parametric Bootstrap for Constructing 95% CI for Predicted Values
+
+1. Fit the regression model to the original data.
+2. Resample the data with replacement \( B \) times to create bootstrap datasets.
+3. For each bootstrap sample:
+   - Fit the regression model.
+   - Predict the response variable using the bootstrap regression line at fixed predictor values.
+4. Calculate the 95% CI at each predictor value using the percentiles of the bootstrap predictions.
+
+
+```{r}
+set.seed(2025)  
+B <- 1000    
+n <- nrow(Computers)  
+
+# Specify the range of 'hd' values to predict
+hd_values <- seq(min(Computers$hd), max(Computers$hd), length.out = 100)
+
+# Matrix to store predictions for each bootstrap sample
+bootstrap_predictions <- matrix(NA, nrow = B, ncol = length(hd_values))
+
+# Perform bootstrap resampling
+for (b in 1:B) {
+  boot_sample <- Computers[sample(1:n, replace = TRUE), ]
+  model <- lm(price ~ hd, data = boot_sample)
+  bootstrap_predictions[b, ] <- predict(model, newdata = data.frame(hd = hd_values))
+}
+
+# Calculate the 95% confidence intervals
+lower_bound <- apply(bootstrap_predictions, 2, quantile, probs = 0.025)
+upper_bound <- apply(bootstrap_predictions, 2, quantile, probs = 0.975)
+predicted_mean <- apply(bootstrap_predictions, 2, mean)
+
+# Plot the regression line and confidence intervals
+plot(Computers$hd, Computers$price, col = "gray", pch = 20,
+     xlab = "Hard Drive Size (MB)", ylab = "Price (USD)",
+     main = "Regression Line with 95% Bootstrap C.I.")
+lines(hd_values, predicted_mean, col = "blue", lwd = 2, lty = 1)
+lines(hd_values, lower_bound, col = "red", lwd = 2, lty = 2)
+lines(hd_values, upper_bound, col = "red", lwd = 2, lty = 2)
+
+legend(
+  "topright",
+  legend = c("Mean Prediction", "95% C.I."),
+  col = c("blue", "red"), lty = c(1, 2), lwd = c(2, 2)
+)
+
+cat("C.I. for the mean of the predicted values:", quantile(bootstrap_predictions, probs = c(0.025, 0.975)), "\n")
+
+
+```
+
+
+## Part 3
+
+In this question we use the same model formulated in Q2.
+
+### Question 3.1: Non-Parametric Bootstrap for Constructing 95% CI for \( SE(\hat{\beta}_0) \) and \( SE(\hat{\beta}_1) \)
+
+1. Fit the original regression model to the data.
+2. Resample the data with replacement \( B \) times to create bootstrap datasets.
+3. For each bootstrap sample:
+   - Fit the regression model and estimate \( SE(\hat{\beta}_0) \) and \( SE(\hat{\beta}_1) \).
+4. Calculate the standard errors of \( SE(\hat{\beta}_0) \) and \( SE(\hat{\beta}_1) \) across all bootstrap samples.
+5. Construct 95% confidence intervals for \( SE(\hat{\beta}_0) \) and \( SE(\hat{\beta}_1) \) using the percentiles of their bootstrap distributions.
+
+
+```{r}
+set.seed(2025)  
+B <- 1000     
+n <- nrow(Computers)
+
+# Vectors to store bootstrap SEs
+se_beta0 <- numeric(B)
+se_beta1 <- numeric(B)
+
+# Perform bootstrap
+for (b in 1:B) {
+  boot_sample <- Computers[sample(1:n, replace = TRUE), ]
+  model <- lm(price ~ hd, data = boot_sample)
+  se_beta0[b] <- summary(model)$coefficients[1, 2]
+  se_beta1[b] <- summary(model)$coefficients[2, 2]
+}
+
+# Calculate 95% confidence intervals
+ci_beta0 <- quantile(se_beta0, probs = c(0.025, 0.975))
+ci_beta1 <- quantile(se_beta1, probs = c(0.025, 0.975))
+
+# Print results
+cat("95% C.I. for SE(β̂0):", ci_beta0, "\n")
+cat("95% C.I. for SE(β̂1):", ci_beta1, "\n")
+```
+
+
+### Question 3.2: Investigating the Influence of Observations with Hard Drive Size > 2000 MB Using Bootstrap
+
+To assess the influence of these observations, the bootstrap procedure can be used to compare standard errors with and without these influential points in the dataset.
+
+1. **Identify Observations**:
+   - Subset the data into two groups: one with hard drive size \( > 2000 \, \text{MB} \), and another without these observations.
+
+2. **Bootstrap Procedure**:
+   - Perform bootstrap resampling separately for the two datasets:
+     - Full dataset (all observations included).
+     - Reduced dataset (excluding observations with hard drive size \( > 2000 \, \text{MB} \)).
+   - For each bootstrap sample:
+     - Fit a linear regression model.
+     - Estimate \( \hat{\beta}_0 \) and \( \hat{\beta}_1 \).
+   - Calculate the standard errors \( SE(\hat{\beta}_0) \) and \( SE(\hat{\beta}_1) \) for each dataset.
+
+3. **Compare Results**:
+   - Compare the empirical distributions of \( SE(\hat{\beta}_0) \) and \( SE(\hat{\beta}_1) \) between the full and reduced datasets.
+
+4. **Visualization**:
+   - Plot histograms or density plots of \( SE(\hat{\beta}_0) \) and \( SE(\hat{\beta}_1) \) for both datasets to visualize the influence of the observations.
+
+
+```{r}
+set.seed(2025)
+B <- 1000     
+n <- nrow(Computers)
+
+# Split data into full dataset and reduced dataset (exclude hd > 2000)
+full_data <- Computers
+reduced_data <- Computers[Computers$hd <= 2000, ]
+
+# Function to perform bootstrap and calculate SEs
+bootstrap_se <- function(data, B) {
+  se_beta0 <- numeric(B)
+  se_beta1 <- numeric(B)
+  
+  for (b in 1:B) {
+    boot_sample <- data[sample(1:nrow(data), replace = TRUE), ]
+    model <- lm(price ~ hd, data = boot_sample)
+    se_beta0[b] <- summary(model)$coefficients[1, 2]
+    se_beta1[b] <- summary(model)$coefficients[2, 2]
+  }
+  
+  return(list(se_beta0 = se_beta0, se_beta1 = se_beta1))
+}
+
+# Perform bootstrap for full and reduced datasets
+bootstrap_full <- bootstrap_se(full_data, B)
+bootstrap_reduced <- bootstrap_se(reduced_data, B)
+
+# Calculate 95% confidence intervals
+ci_full_SE_beta0 <- quantile(bootstrap_full$se_beta0, probs = c(0.025, 0.975))
+ci_full_SE_beta1 <- quantile(bootstrap_full$se_beta1, probs = c(0.025, 0.975))
+ci_reduced_SE_beta0 <- quantile(bootstrap_reduced$se_beta0, probs = c(0.025, 0.975))
+ci_reduced_SE_beta1 <- quantile(bootstrap_reduced$se_beta1, probs = c(0.025, 0.975))
+
+# Print results
+cat("95% C.I. for SE(β̂0) - Full Data:", ci_full_SE_beta0, "\n")
+cat("95% C.I. for SE(β̂1) - Full Data:", ci_full_SE_beta1, "\n")
+cat("95% C.I. for SE(β̂0) - Reduced Data:", ci_reduced_SE_beta0, "\n")
+cat("95% C.I. for SE(β̂1) - Reduced Data:", ci_reduced_SE_beta1, "\n")
+
+# Plot bootstrap distributions for SE(β̂0)
+par(mfrow = c(1, 2))
+hist(bootstrap_full$se_beta0, col = "blue", main = "SE(β̂0) - Full Data",
+     xlab = "SE(β̂0)", breaks = 20)
+hist(bootstrap_reduced$se_beta0, col = "red", main = "SE(β̂0) - Reduced Data",
+     xlab = "SE(β̂0)", breaks = 20)
+
+# Plot bootstrap distributions for SE(β̂1)
+hist(bootstrap_full$se_beta1, col = "blue", main = "SE(β̂1) - Full Data",
+     xlab = "SE(β̂1)", breaks = 20)
+hist(bootstrap_reduced$se_beta1, col = "red", main = "SE(β̂1) - Reduced Data",
+     xlab = "SE(β̂1)", breaks = 20)
+```
+
+
+## Part 4
+
+Consider a sample of 20 observations from a population with mean $\mu$:
+
+```{r}
+x<-c(0.68446806,-0.02596037,-0.90015774,0.72892605,-0.45612255, 0.19311847,
+-0.13297109, -0.99845382, 0.37278006, -0.20371894, -0.15468803, 0.19298230
+, -0.42755534, -0.04704525, 0.15273726, 0.03655799, 0.01315016, -0.59121428,
+4.50955771, 2.87272653)
+length(x)
+```
+
+### Question 4.1
+
+Estimate 𝜇 using the mean and the median.
+
+```{r}
+cat("mean of mu", mean(x), "\n")
+cat("mean of mu", median(x), "\n")
+```
+
+### Question 4.2: Approximation of the Distribution of Sample Mean and Median Using Non-Parametric Bootstrap
+
+1. **Bootstrap Resampling**:
+   - Generate \( B = 1000 \) bootstrap samples from the original data by sampling with replacement.
+   - For each bootstrap sample, calculate the sample mean and the sample median.
+
+2. **Approximation of Distributions**:
+   - Collect the \( B \) bootstrap estimates for both the sample mean and the sample median.
+   - Plot histograms or density plots to visualize the approximated distributions.
+
+3. **Summary Statistics**:
+   - Compute descriptive statistics (mean, standard deviation) for the bootstrap distributions.
+
+
+```{r}
+B <- 1000L
+mean.b <- median.b <- numeric(B)
+set.seed(2025) 
+for (i in 1:B) {
+  x.b <- sample(x, replace = TRUE)
+  mean.b[i] <- mean(x.b)
+  median.b[i] <- median(x.b)
+}
+```
+
+```{r, echo=FALSE}
+#par(mfrow = c(1,2))
+#hist(mean.b, nclass = 50)
+#hist(median.b, nclass = 50)
+
+par(mfrow = c(1, 2))
+hist(mean.b, 
+     main = "Distribution of bootstrap mean",
+     xlab = "Bootstrap mean")
+hist(median.b, 
+     main = "Distribution of bootstrap median",
+     xlab = "Bootstrap median")
+par(mfrow = c(1, 1))
+```
+
+
+### Question 4.3: Estimation of Standard Error and 95% Confidence Intervals for Sample Mean and Median Using Semi-Parametric Bootstrap
+
+
+1. **Semi-Parametric Bootstrap**:
+   - Decompose the data into a parametric component (mean and standard deviation) and a residual component.
+   - Generate bootstrap samples by resampling residuals and adding them back to the parametric predictions.
+   - For each bootstrap sample, calculate the sample mean and median.
+
+2. **Standard Error and Confidence Interval**:
+   - Compute the standard errors as the standard deviation of the bootstrap estimates.
+   - Construct 95% CIs using the percentiles of the bootstrap distributions.
+
+```{r}
+lm0 <- lm(x ~ 1)
+e0 <- lm0$residuals
+B <- 1000L
+mean.semib <- median.semib <- numeric(B)
+set.seed(2025) 
+for (i in 1:B) {
+  e.b <- sample(e0, replace = TRUE)
+  x.b <- coef(lm0)[1] + e.b
+  mean.semib[i] <- mean(x.b)
+  median.semib[i] <- median(x.b)
+}
+```
+
+```{r}
+cat("The standard error of the sample mean is :", sd(mean.semib)/sqrt(length(mean.semib)), "\n")
+
+cat("The standard error of the sample median is :", sd(median.semib)/sqrt(length(median.semib)), "\n")
+
+cat("The C.I for the sample mean is :", quantile(mean.semib, probs = c(0.025, 0.975)), "\n")
+
+cat("The C.I for the sample mean is :", quantile(median.semib, probs = c(0.025, 0.975)), "\n")
+```
+
+### Question 4.4: Estimation of Mean Squared Error (MSE) for the Mean and Median Using Jackknife
+
+1. **Jackknife Method**:
+   - For a sample of size \( n \), iteratively leave out one observation at a time to create \( n \) subsamples, each of size \( n-1 \).
+   - Calculate the statistic (mean or median) for each subsample.
+
+2. **Estimate MSE**:
+   - Compute the jackknife estimate of the parameter \( \hat{\theta}_{(i)} \) for each subsample.
+   - Calculate the jackknife estimate of the variance:
+     \[
+     \text{Var}_{\text{jackknife}} = \frac{n-1}{n} \sum_{i=1}^n (\hat{\theta}_{(i)} - \bar{\theta})^2
+     \]
+     where \( \bar{\theta} \) is the average of the jackknife estimates.
+   - Use the variance to compute the MSE:
+     \[
+     \text{MSE} = \text{Var}_{\text{jackknife}}
+     \]
+
+
+```{r}
+n <- length(x)
+mean.jk <- median.jk <- numeric(n)
+for (i in 1:n) {
+  x.jk <- x[-i]
+  mean.jk <- mean(x.jk)
+  median.jk <- median(x.jk)
+}
+```
+
+```{r}
+mean_mse=(n - 1) * mean((mean.jk - mean(x))^2)
+median_mse=(n - 1) * mean((median.jk - median(x))^2)
+
+
+cat("MSE for Mean:", mean_mse, "\n")
+cat("MSE for Median:", median_mse, "\n")
+
+# Decide which parameter to prefer
+if (mean_mse < median_mse) {
+  cat("The Mean is preferred based on lower MSE.\n")
+} else {
+  cat("The Median is preferred based on lower MSE.\n")
+}
+```
+
+### Question 4.5: Estimation of \( \pi(M < 0) \), Its Distribution, and 95% Confidence Interval
+
+1. **Bootstrap Sampling**:
+   - Resample the data \( B \) times (with replacement).
+   - Compute the median \( M \) for each bootstrap sample.
+
+2. **Estimate \( \pi(M < 0) \)**:
+   - Count the number of bootstrap medians that are less than 0.
+   - Calculate \( \hat{\pi}(M < 0) \) as the proportion:
+     \[
+     \hat{\pi}(M < 0) = \frac{\text{Count of } M < 0}{B}
+     \]
+
+3. **Distribution of \( \hat{\pi}(M < 0) \)**:
+   - The bootstrap procedure generates a distribution of \( M < 0 \).
+
+4. **Confidence Interval**:
+   - Use the bootstrap distribution to construct a 95% confidence interval for \( \pi(M < 0) \) based on the 2.5th and 97.5th percentiles.
+
+
+```{r, echo=FALSE}
+set.seed(2025)  
+n <- length(x)
+B <- 1000 
+
+# Initialize vectors
+bootstrap_medians <- numeric(B)  
+medians_below_zero <- numeric(0)  
+set.seed(2025) 
+for (b in 1:B) {
+  resample <- sample(x, size = n, replace = TRUE)  
+  bootstrap_median <- median(resample)            
+  bootstrap_medians[b] <- bootstrap_median        
+  if (bootstrap_median < 0) {
+    medians_below_zero <- c(medians_below_zero, bootstrap_median)  
+  }
+}
+
+# Calculate the proportion of medians < 0
+pi_hat <- mean(bootstrap_medians < 0)
+
+# Distribution of pi
+#hist(medians_below_zero, nclass = 50)
+hist(medians_below_zero, 
+     main = "Distribution of pi_M",
+     xlab = "Bootstrap pi_M")
+par(mfrow = c(1, 1))
+
+# 95% Confidence Interval
+ci <- quantile(medians_below_zero, probs = c(0.025, 0.975))
+
+# Results
+cat("Estimated π(M < 0):", pi_hat, "\n")
+cat("95% Confidence Interval for π(M < 0):", ci, "\n")
+
+```
+
+
