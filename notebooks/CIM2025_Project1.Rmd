@@ -13,7 +13,7 @@ output:
 header-includes:
  - \usepackage{float}
  - \usepackage{titling}
- # - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
+ - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
  - \posttitle{\end{center}}
 ---
 \pagebreak
@@ -64,7 +64,7 @@ $$
 
 ### Question 1.1
 
-Estimate the model using a classical GLM approach.
+> Estimate the model using a classical GLM approach.
 
 As we are dealing with binary outcome, the model is estimated by a GLM with a binomial family. 
 
@@ -77,16 +77,20 @@ The coefficient estimate for `ageOFocc` is 0.021183. This means that for each ad
 
 ### Question 1.2
 
-Let $X_{50}$ be the age of occupant for which the probability to die is 0.5, i.e., $P(Y_i = 1) = 0.5$. Estimate $X_{50}$. Use non parametric bootstrap to estimate the distribution of $X_{50}$ and to construct a 95% C.I. for the $X_{50}$
+> Let $X_{50}$ be the age of occupant for which the probability to die is 0.5, i.e., $P(Y_i = 1) = 0.5$. Estimate $X_{50}$. Use non parametric bootstrap to estimate the distribution of $X_{50}$ and to construct a 95% C.I. for the $X_{50}$
 
-_Estimation of $X_{50}$_
+_Estimation of $X_{50}$_:
 
 $$
-\begin{aligned}
 logit(\pi_i) = log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1 x_i \\
-For \pi_i = 0.5, 0 = \beta_0 + \beta_1 X_{50} \\
+$$
+
+$$
+\pi_i = 0.5, 0 = \beta_0 + \beta_1 X_{50} \\
+$$
+
+$$
 X_{50} = -\frac{\beta_0}{\beta_1}
-\end{aligned}
 $$
 
 
@@ -132,21 +136,22 @@ abline(v = -beta_0 / beta_1, col = "red")
 
 ### Question 1.3
 
-For the model formulated above, estimate the OR (for a unit increased in age). Use non parametric bootstrap to construct a 95% C.I. for the OR (for a unit increased in age) using the percentile and bootstrap *t* interval methods, which one do you prefer for the parameter OR ?
+> For the model formulated above, estimate the OR (for a unit increased in age). Use non parametric bootstrap to construct a 95% C.I. for the OR (for a unit increased in age) using the percentile and bootstrap *t* interval methods, which one do you prefer for the parameter OR ?
 
 _OR for a unit increased in age_
 
 The OR for a unit increased in age is calculated as the exponentiation value of $\beta_1$:
 
 $$
-\begin{aligned}
 logit(\pi_i) = log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1 x_i \\
+$$
+
+$$
 odds_i = \frac{\pi_i}{1-\pi_i} = exp(\beta_0 + \beta_1 x_i)
-\end{aligned}
 $$
 
 
-```{r, echo=TRUE}
+```{r}
 beta_1 <- coef(glm.daag)[2]
 OR <- exp(beta_1)
 sprintf("OR for a unit increased in age: %.2f", OR)
@@ -186,8 +191,6 @@ summary_beta1.boot <- foreach(i=1:GLOBAL_B, .combine = rbind, .export = c("nassC
 }
 ```
 
-
-
 ```{r}
 beta_1 <- coef(glm.daag)[2]
 beta_1_se <- summary(glm.daag)$coef["ageOFocc", "Std. Error"]
@@ -209,7 +212,7 @@ The bootstrap t interval is slightly wider compared to the bootstrap percentile 
 
 ### Question 1.4
 
-We focus on the odds ratio (OR) for a unit increased in age. Use parametric bootstrap to test the null hypothesis $H_0: OR = 1$.
+> We focus on the odds ratio (OR) for a unit increased in age. Use parametric bootstrap to test the null hypothesis $H_0: OR = 1$.
 
 Null hypothesis ($H_0$): : The odds ratio for a unit increase in age (
 OR) is 1. This implies that $\beta1=0$ in the logistic regression model.
@@ -239,7 +242,7 @@ inv.logit <- function(x) {
 prob_h0 <- inv.logit(coef(glm.daag0)[1])
 ```
 
-The probability of death under $H_0$ is equal to 0.0453 at each age level (i.e., the overall prevalence in the sample). Use it for resampling step in parametric bootstrap.
+The probability of death under $H_0$ is equal to exp(-3.04867)/(1+exp(-3.04867)) = 0.0453 at each age level (i.e., the overall prevalence in the sample). Use it for resampling step in parametric bootstrap.
 
 ```{r, cache=TRUE}
 coef_h0.boot <- foreach(i=1:GLOBAL_B, .combine = rbind, .export = c("nassCDS", "prob_h0")) %dopar% {
@@ -264,7 +267,7 @@ p_value <- (1 + sum(coef_h0.boot > beta_1) ) / (GLOBAL_B + 1) # <0.001
 
 ### Question 1.5
 
-Let $\pi_{33}$ be the probability of death for an occupant at age 33. Use parametric bootstrap to calculate the standard error for $\pi_{33}$ and construct a 90% C.I. for $\pi_{33}$.
+> Let $\pi_{33}$ be the probability of death for an occupant at age 33. Use parametric bootstrap to calculate the standard error for $\pi_{33}$ and construct a 90% C.I. for $\pi_{33}$.
 
 The logistic regression model gives:
 $$
@@ -311,7 +314,7 @@ In this question we fit a robust GLM for the model specified in Q1. Use the R pa
 
 ### Question 2.1
 
-Estimate the model using the R package glmRob.
+> Estimate the model using the R package glmRob.
 
 ```{r}
 rob.glm.daag <- glmRob(dead ~ ageOFocc, data = nassCDS, family = "binomial")
@@ -320,7 +323,8 @@ summary(rob.glm.daag)
 
 ### Question 2.2
 
-Use non parametric bootstrap to estimate the SE for the intercept and slope.
+> Use non parametric bootstrap to estimate the SE for the intercept and slope.
+
 The bootstrap algorithm is as follow:
 
  - Resample the data with replacement.
@@ -360,7 +364,7 @@ abline(v = quantile(rob.coef.boot[,2], probs = c(0.025, 0.975)), col = "blue")
 
 ### Question 2.3
 
-Use the jackknife and the bootstrap procedures to estimate the bias and MSE for the intercept and slope estimated by: (1) the GLM model in Q2.1 and (2) the robust GLM model estimated in Q2.2. Which method you prefer to use for the estimation of the intercept and slope?
+> Use the jackknife and the bootstrap procedures to estimate the bias and MSE for the intercept and slope estimated by: (1) the GLM model in Q2.1 and (2) the robust GLM model estimated in Q2.2. Which method you prefer to use for the estimation of the intercept and slope?
 
 For each GLM approach, the bias and MSE were evaluated after the sampling procedures: bootstrap and Jackknife.
 
@@ -461,7 +465,7 @@ addmargins(bag.dead)
 
 ### Question 3.2
 
-Calculate the odds ratio for usage of airbag and the accident outcome (dead/alive) and construct 95% confidence interval. You can use the R function oddsratio. What is your conclusions? Do you think that airbags in the car influence the accident outcome ?
+> Calculate the odds ratio for usage of airbag and the accident outcome (dead/alive) and construct 95% confidence interval. You can use the R function oddsratio. What is your conclusions? Do you think that airbags in the car influence the accident outcome ?
 
 ```{r}
 epitools::oddsratio(bag.dead, method = "wald")
@@ -471,7 +475,7 @@ The OR is less than 1, airbags are associated with decreased odds of survival.
 
 ### Question 3.3
 
-Use parametric bootstrap to construct a construct a 95% confidence interval for the OR.
+> Use parametric bootstrap to construct a construct a 95% confidence interval for the OR.
 
 Simulate B samples from the multinomial distribution using the observed cell proportions. 
 For each bootstrap sample:
@@ -498,7 +502,7 @@ ors.b <- foreach(1:B, .combine = c, .packages = c('epitools'), .export = c("n.no
 ```
 
 ```{r}
-mean(ors.b)
+# mean(ors.b)
 quantile(ors.b, probs = c(0.025, 0.975))
 hist(ors.b, nclass = 50)
 abline(v = quantile(ors.b, probs = c(0.025, 0.975)), col = "red")
@@ -506,7 +510,7 @@ abline(v = quantile(ors.b, probs = c(0.025, 0.975)), col = "red")
 
 ### Question 3.4
 
-Use permutations test to test the hypothesis that airbags in the car DO NOT influence the accident outcome using a chi-square test for a 2 × 2 table. Compare the distribution of the chi-square test statistic in this question to the theoretical distribution of the test statistic.
+> Use permutations test to test the hypothesis that airbags in the car DO NOT influence the accident outcome using a chi-square test for a 2 × 2 table. Compare the distribution of the chi-square test statistic in this question to the theoretical distribution of the test statistic.
 
 Null Hypothesis ($H_0$): Airbags have no effect on the accident outcome (i.e., the rows and columns of the table are independent).
 The permutation test est performed as follow:
@@ -553,10 +557,10 @@ for (i in 1:B) {
 
 # Calculate p-value
 p_value<- (1+sum(permuted_stats>observed_stat))/(B+1)
-p_value
+sprintf("p_value: %.2e", p_value)
 ```
 
-p-value=9.999e-05. We reject the $H_0$ => airbags in the car influences significantly the accident outcome.
+We reject the $H_0$ => airbags in the car influences significantly the accident outcome.
 
 The distributions align well, the theoretical chi-square distribution is a good approximation for the test statistic under the null hypothesis. 
 
@@ -579,7 +583,7 @@ If this question we focus on the variables dead (the outcome of the accident) an
 
 ### Question 4.1
 
-Estimate the proportion of male (𝜋𝑀) and female (𝜋𝐹) that died in the accidents.
+> Estimate the proportion of male (𝜋𝑀) and female (𝜋𝐹) that died in the accidents.
 
 To estimate the proportion of males (𝜋𝑀) and female (𝜋𝐹) that died in the accidents, we calculated the proportion of deaths within each gender category. The formula for each proportion is:
 
@@ -606,7 +610,7 @@ sprintf("The proportion of female that died in the accidents is  : %.3f", p.fema
 
 ### Question 4.2
 
-Test the hypothesis that the proportion of male and female that died in an accident are equal using a classical two-samples test (use a two sided test).
+> Test the hypothesis that the proportion of male and female that died in an accident are equal using a classical two-samples test (use a two sided test).
 
 Null hypothesis ($H_0$): $𝜋_𝑀=𝜋_F$
 Alternative hypothesis ($H_A$): $𝜋_𝑀\neq𝜋_F$
@@ -647,7 +651,7 @@ if (p_value < 0.05) {
 
 ### Question 4.3
 
-Use parametric bootstrap to test the hypothesis that the proportion of male and female that died in an accidents are equal against a two sided alternative.
+> Use parametric bootstrap to test the hypothesis that the proportion of male and female that died in an accidents are equal against a two sided alternative.
 
 Under $H_0$, the proportion of males and females who died are the same. The pooled proportion $\pi^{hat}$ is the same for both groups. The bootstrap procedure is as follow:
  - Under the null, generate new datasets by randomly sampling deaths for both males and females based on the pooled proportion $\pi^{hat}$, while keeping the sample sizes fixed (the number of males and females).
@@ -688,7 +692,10 @@ p-value=9.999e-05. The p-value is less than 0.05, you would reject the null hypo
 
 ### Question 4.4
 
+> Use non-parametric bootstrap construct a 95% confident interval for 𝜋𝑀 − 𝜋𝐹
+
 The non-parametric bootstrap procedure to construct a 95% confident interval for $𝜋𝑀 − 𝜋𝐹$ is described as follow:
+
  - calculate the observed difference in proportions $𝜋𝑀 − 𝜋𝐹$ from the original data. 
  - Create bootstrap samples by resampling with replacement from the observed data for both males and females.
  - For each bootstrap sample, calculate the difference in proportions between males and females.
@@ -717,8 +724,7 @@ for (i in 1:B) {
 # Calculate the 95% confidence interval from the bootstrap distribution
 hist(boot_diff,nclass=100)
 CI<- quantile(boot_diff,probs=c(0.025,0.975))
-
-sprintf("The difference in the proportion is  : %.3f", CI)
+abline(v = CI, col = "blue")
 ```
 
 The CI 95\% CI: [-0.018, 0.008]. 

@@ -14,7 +14,7 @@ output:
 header-includes:
  - \usepackage{float}
  - \usepackage{titling}
- # - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
+ - \pretitle{\begin{center}\LARGE\includegraphics[width=6cm]{UHasselt.png}\\[\bigskipamount]}
  - \posttitle{\end{center}}
 ---
 \pagebreak

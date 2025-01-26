@@ -1,15 +1,10 @@
 ---
 title: |
   **2nd-Year Master of Statistics and Data Science**
-  **Computer Intensive Methods: Final projects (2024/2025**
-  **Project 3**
-author: |
-  Name:  Edmond SACLA AIDE (2159278)
-  Lecturer: Prof. Ziv
-  
-date: |
-  2024-12-08
-  
+  **Computer Intensive Methods: Final projects (2024/2025)**
+subtitle: "**Project 3**"
+author: "Mikita Bisliuk (2364811), Edmond Sacla Aide (2159278)"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   pdf_document:
     latex_engine: xelatex
@@ -27,8 +22,6 @@ header-includes:
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # loading packages
-library(tidyverse)
-library(ggplot2)
 library("DAAG")
 library("robust")
 library(parallel)
@@ -58,6 +51,7 @@ Y_{ij} = \mu_j + \epsilon_{ij},
 \]
 
 where:
+
 - \( \mu_j \) is the mean weight for diet group \( j \),
 - \( \epsilon_{ij} \) is the random error term with \( \epsilon_{ij} \sim N(0, \sigma^2) \).
 
@@ -77,6 +71,7 @@ The test statistic for one-way ANOVA is given by:
 F = \frac{\text{Between-group variability (MSB)}}{\text{Within-group variability (MSW)}},
 \]
 where:
+
 - \( MSB = \frac{SSB}{k - 1} \), the mean sum of squares between groups,
 - \( MSW = \frac{SSW}{N - k} \), the mean sum of squares within groups,
 - \( k \) is the number of groups, and \( N \) is the total number of observations.
@@ -151,7 +146,7 @@ hist(fval.b, xlim = c(0, 20),
      main = "Distribution of bootstrap F statistics under the null",
      xlab = "F statistics")
 abline(v = F_obs , col = "red")
-dev.off()
+invisible(dev.off())
 
   # P-value
 p_value<- (1 + sum(fval.b > F_obs))/(B + 1)
@@ -202,7 +197,7 @@ hist(fval.boot, xlim = c(0, 20),
      main = "Distribution of permutation F statistics under the null",
      xlab = "F statistics")
 abline(v = F_obs, col = "red")
-dev.off()
+invisible(dev.off())
 
 # P-value
 p_value_permutation <-(1 + sum(fval.boot > F_obs))/(B + 1)
@@ -308,6 +303,7 @@ We aim to estimate the following regression model using Ordinary Least Squares (
 y_i = \beta_0 + \beta_1 x_i + \epsilon_i
 \]
 where:
+
 - \( y_i \): Response variable (e.g., price).
 - \( x_i \): Predictor variable (e.g., hard drive size).
 - \( \beta_0 \): Intercept.
@@ -337,14 +333,14 @@ png("Figures/F2_2pred.png", units="in", width = 9, height = 5, res = 300)
 hist(price_pred, nclass=50,
      main = "The distribution of prediction",
      xlab = "Predictions")
-dev.off()
+invisible(dev.off())
 # Error
 pred_error <- Computers$price - price_pred
 png("Figures/F2_2error.png", units="in", width = 9, height = 5, res = 300)
 hist(pred_error, nclass=50,
      main = "The distribution of prediction errors",
      xlab = "Errors")
-dev.off()
+invisible(dev.off())
 
 # Mean squared error
 mse1 <- sqrt(mean(pred_error^2))
@@ -666,7 +662,7 @@ hist(median.b,
      main = "Distribution of bootstrap median",
      xlab = "Bootstrap median")
 par(mfrow = c(1, 1))
-dev.off()
+invisible(dev.off())
 ```
 
 
@@ -798,7 +794,7 @@ hist(medians_below_zero,
      main = "Distribution of pi_M",
      xlab = "Bootstrap pi_M")
 par(mfrow = c(1, 1))
-dev.off()
+invisible(dev.off())
 
 # 95% Confidence Interval
 ci <- quantile(medians_below_zero, probs = c(0.025, 0.975))
